@@ -1,0 +1,10 @@
+node_modules
+dist
+.vercel
+.env*
+!.env.example
+coverage
+playwright-report
+test-results
+.claude
+.serena
