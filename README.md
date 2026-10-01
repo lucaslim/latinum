@@ -20,7 +20,7 @@ pnpm exec playwright install chromium   # once, for e2e
 | `pnpm typecheck` | `tsc --noEmit`                                                      |
 | `pnpm test`      | Vitest (unit and build smoke test)                                  |
 | `pnpm build`     | Typecheck, then `vite build` to `dist/`                             |
-| `pnpm e2e`       | Playwright against `vite preview` of a fresh build                  |
+| `pnpm e2e`       | `vite build`, then Playwright against `vite preview`                |
 
 `API_PORT` overrides the API port for `pnpm dev`.
 

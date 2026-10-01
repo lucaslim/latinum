@@ -10,7 +10,7 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${port}` },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: `pnpm build && pnpm exec vite preview --port ${port} --strictPort`,
+    command: `vite preview --port ${port} --strictPort`,
     url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
   },
