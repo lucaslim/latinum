@@ -15,5 +15,13 @@
     "isolatedModules": true,
     "skipLibCheck": true
   },
-  "include": ["api", "src", "e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": [
+    "api",
+    "src",
+    "e2e",
+    "scripts",
+    "drizzle.config.ts",
+    "vite.config.ts",
+    "playwright.config.ts"
+  ]
 }
