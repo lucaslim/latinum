@@ -24,6 +24,26 @@ pnpm exec playwright install chromium   # once, for e2e
 
 `API_PORT` overrides the API port for `pnpm dev`.
 
+## Platform checks
+
+```sh
+scripts/smoke.sh https://trading-journal-r8lqy6j1u-lucaslims-projects-af1d1be4.vercel.app
+```
+
+The URL came from the successful GitHub Production deployment's `environment_url`.
+The script checks anonymous GET and HEAD on `/` and `/api/health`, without cookies
+or redirect following. Only the observed 302 redirect to `https://vercel.com/sso-api`
+passes; application responses and transport errors fail.
+
+The installable manifest uses credentialed fetching and starts on that production
+origin. The service worker caches static assets only and excludes `/api/` navigation.
+
+The daily `0 10 * * *` UTC cron targets `/api/cron/heartbeat`. Its handler fails
+closed unless `CRON_SECRET` matches the bearer token; no secret is provisioned by
+this change. `HeartbeatWriter` in `src/api/cron.ts` is the typed persistence seam,
+currently a no-op. Database wiring, production cron proof, and installed iPhone
+login/persistence testing remain follow-up work.
+
 ## Layout
 
 - `api/index.ts`: Vercel Function entry (`export default app`)

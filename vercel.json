@@ -4,6 +4,7 @@
   "buildCommand": "pnpm build",
   "outputDirectory": "dist",
   "regions": ["iad1"],
+  "crons": [{ "path": "/api/cron/heartbeat", "schedule": "0 10 * * *" }],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
