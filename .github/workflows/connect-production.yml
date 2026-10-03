@@ -38,7 +38,7 @@ jobs:
           DATABASE_URL_OWNER: ${{ secrets.DATABASE_URL_OWNER }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT: trading-journal
-          VERCEL_TEAM_SLUG: lucaslims-projects
+          VERCEL_TEAM_SLUG: lucaslims-projects-af1d1be4
         run: pnpm exec tsx scripts/connect-production.ts
       - name: Read back vercel-cron heartbeat rows
         if: inputs.action == 'verify-heartbeat'

@@ -49,11 +49,31 @@ describe("setProductionEnv", () => {
     expect(calls.every((call) => call.method === "GET")).toBe(true);
   });
 
-  it("never puts the value in an error", async () => {
-    const { api } = client(() => ({}), 403);
-    await expect(api.setProductionEnv("DATABASE_URL", "very-secret")).rejects.toThrow(
-      /^Vercel GET \/v10\/projects\/proj\/env failed with 403$/,
+  it("reports the response body on failure", async () => {
+    const { api } = client(
+      () => ({ error: { code: "forbidden", message: "Not authorized" } }),
+      403,
     );
+    await expect(api.setProductionEnv("DATABASE_URL", "very-secret")).rejects.toThrow(
+      'Vercel GET /v10/projects/proj/env failed with 403: {"error":{"code":"forbidden","message":"Not authorized"}}',
+    );
+  });
+
+  it("scrubs the value and truncates when the response echoes it", async () => {
+    const { api } = client(
+      (call) =>
+        call.method === "GET"
+          ? { envs: [] }
+          : { error: { message: `bad value very-secret ${"x".repeat(600)}` } },
+      400,
+    );
+    const failure = await api
+      .setProductionEnv("DATABASE_URL", "very-secret")
+      .catch((e: Error) => e);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain("failed with 400");
+    expect((failure as Error).message).not.toContain("very-secret");
+    expect((failure as Error).message.length).toBeLessThan(600);
   });
 });
 

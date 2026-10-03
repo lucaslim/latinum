@@ -16,6 +16,7 @@ export function vercelClient(
     path: string,
     query: Record<string, string> = {},
     body?: unknown,
+    redact: string[] = [],
   ): Promise<T> {
     const url = new URL(path, API);
     for (const [key, value] of Object.entries({ ...query, slug: team })) {
@@ -26,8 +27,14 @@ export function vercelClient(
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    // Status and path only: a request body carries secret values, so it is never echoed.
-    if (!res.ok) throw new Error(`Vercel ${method} ${path} failed with ${res.status}`);
+    if (!res.ok) {
+      // The response text is what makes a 403 diagnosable; request values are scrubbed in case it echoes them.
+      const text = redact.reduce(
+        (acc, value) => acc.replaceAll(value, "[redacted]"),
+        await res.text(),
+      );
+      throw new Error(`Vercel ${method} ${path} failed with ${res.status}: ${text.slice(0, 500)}`);
+    }
     return (await res.json()) as T;
   }
 
