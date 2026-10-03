@@ -93,5 +93,13 @@ export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
   async function recordHeartbeat(heartbeat: typeof s.platformHeartbeat.$inferInsert) {
     await db.insert(s.platformHeartbeat).values(heartbeat);
   }
-  return { createPosition, appendTrades, readOpenPositions, recordHeartbeat };
+  // Phase 1 is one book: a second account must be a deliberate decision, not a silent merge.
+  async function readOpenBook() {
+    const accounts = await db.select({ id: s.accounts.id }).from(s.accounts);
+    if (accounts.length > 1)
+      throw new Error("More than one account: the Sheet reads a single book");
+    const [account] = accounts;
+    return account ? readOpenPositions(account.id) : [];
+  }
+  return { createPosition, appendTrades, readOpenPositions, recordHeartbeat, readOpenBook };
 }

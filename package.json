@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "e2e": "vite build && playwright test",
+    "verify": "pnpm lint && pnpm typecheck && pnpm db:drift && pnpm test && pnpm build && pnpm e2e",
     "db:generate": "drizzle-kit generate",
     "db:drift": "tsx scripts/drift.ts",
     "db:migrate": "tsx scripts/migrate.ts",
