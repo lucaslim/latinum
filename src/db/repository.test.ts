@@ -116,3 +116,14 @@ test("money round trips signed fees and positive prices/strikes exactly", async 
   expect(loaded?.legs[0]?.trades[0]?.price).toBe(m("1.0850"));
   expect(loaded?.legs[0]?.trades[0]?.fees).toBe(m("-0.6527"));
 });
+test("recordHeartbeat inserts one row with the given time and source", async () => {
+  const { db } = database;
+  const at = new Date("2026-10-04T10:07:00Z");
+  await repository(db).recordHeartbeat({ at, source: "repository-test" });
+  const rows = await db
+    .select()
+    .from(s.platformHeartbeat)
+    .where(eq(s.platformHeartbeat.source, "repository-test"));
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.at).toEqual(at);
+});
