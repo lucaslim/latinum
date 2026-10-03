@@ -51,3 +51,25 @@ login/persistence testing remain follow-up work.
 - `src/domain/`: pure logic shared by web and API
 - `src/web/`: React app
 - `e2e/`: Playwright tests
+- `src/db/`: phase-1 schema, driver-neutral repository, money mapping and open-book seed
+- `drizzle/`: ordered stable migrations (`0000` roles, `0001` schema)
+
+## Database
+
+`pnpm db:seed [local-path]` migrates and seeds local PGlite (default `.pglite/`). It never
+connects to Neon and replaces only the prototype seed account's open book on reruns.
+The synthetic opening fills preserve the fixture's covered-share basis and spread net
+price; they do not represent historical assignments or rolls. The open-book DTO bridge
+supports only the prototype's strategies; repository reads retain the full stored rows.
+
+After changing `src/db/schema.ts`, run `pnpm db:generate` and commit all generated files.
+`pnpm db:drift` rejects both tracked and untracked migration changes. Tests apply the real
+chain in PGlite, exercise every CHECK, and prove app DML plus exact permission denials.
+PGlite's username context enforces permissions but does not apply role login timezone
+settings; tests verify the persisted UTC role setting, not a live Neon login.
+
+Only a successful main-push CI check unlocks `pnpm db:migrate`, using the job-scoped
+`DATABASE_URL_OWNER` GitHub secret. There is one Neon branch (`production`), no preview
+DB, and no CI seed. The owner connection string must never go into Vercel. The SQL-created
+`app_rw` role has no initial password; later provisioning sets it without rerunning or
+changing the role migration. Live production privilege proof belongs to that provisioning.

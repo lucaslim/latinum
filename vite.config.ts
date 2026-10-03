@@ -35,9 +35,10 @@ export default defineConfig({
     environment: "node",
     coverage: {
       provider: "v8",
-      include: ["src/domain/**/*.ts"],
+      include: ["src/domain/**/*.ts", "src/db/repository.ts", "src/db/money.ts", "src/db/book.ts"],
+      reporter: ["text", "lcov", "json-summary"],
       exclude: ["src/domain/**/*.test.ts", "src/domain/test/**", "src/domain/index.ts"],
-      thresholds: { lines: 95 },
+      thresholds: { lines: 95, "src/domain/**": { lines: 95 } },
     },
   },
 });

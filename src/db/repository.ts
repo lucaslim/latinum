@@ -1,0 +1,94 @@
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import * as s from "./schema.ts";
+
+export type NewTrade = Omit<typeof s.trades.$inferInsert, "legId">;
+export type NewLeg = Omit<typeof s.legs.$inferInsert, "positionId"> & { trades: NewTrade[] };
+export type NewPosition = Omit<typeof s.positions.$inferInsert, "closedOn"> & { legs: NewLeg[] };
+
+export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
+  async function appendTrades(positionId: string, events: (typeof s.trades.$inferInsert)[]) {
+    return db.transaction(async (tx) => {
+      const [position] = await tx
+        .select()
+        .from(s.positions)
+        .where(eq(s.positions.id, positionId))
+        .for("update");
+      if (!position) throw new Error("Position not found");
+      const legs = await tx.select().from(s.legs).where(eq(s.legs.positionId, positionId));
+      const ids = legs.map((leg) => leg.id);
+      if (events.some((event) => !ids.includes(event.legId)))
+        throw new Error("Trade leg is not in position");
+      if (events.length) await tx.insert(s.trades).values(events);
+      const trades = await tx
+        .select()
+        .from(s.trades)
+        .where(inArray(s.trades.legId, ids))
+        .orderBy(s.trades.tradeDate, s.trades.createdAt, s.trades.id);
+      const balances = new Map(ids.map((id) => [id, 0]));
+      let lastDate: string | null = null;
+      for (const event of trades) {
+        const balance =
+          (balances.get(event.legId) ?? 0) +
+          (event.action === "open" ? event.quantity : -event.quantity);
+        if (balance < 0) throw new Error("Trade exceeds open leg quantity");
+        balances.set(event.legId, balance);
+        lastDate = event.tradeDate;
+      }
+      const closedOn =
+        legs.length > 0 && [...balances.values()].every((balance) => balance === 0)
+          ? lastDate
+          : null;
+      await tx.update(s.positions).set({ closedOn }).where(eq(s.positions.id, positionId));
+      return closedOn;
+    });
+  }
+  async function createPosition(input: NewPosition) {
+    return db.transaction(async (tx) => {
+      const { legs, ...fields } = input;
+      const [position] = await tx.insert(s.positions).values(fields).returning();
+      if (!position) throw new Error("Position insert returned no row");
+      const events: (typeof s.trades.$inferInsert)[] = [];
+      for (const { trades, ...fields } of legs) {
+        const [leg] = await tx
+          .insert(s.legs)
+          .values({ ...fields, positionId: position.id })
+          .returning();
+        if (!leg) throw new Error("Leg insert returned no row");
+        events.push(...trades.map((event) => ({ ...event, legId: leg.id })));
+      }
+      await repository(tx).appendTrades(position.id, events);
+      return position.id;
+    });
+  }
+  async function readOpenPositions(accountId: string) {
+    const positions = await db
+      .select({ position: s.positions })
+      .from(s.positions)
+      .innerJoin(s.campaigns, eq(s.positions.campaignId, s.campaigns.id))
+      .where(and(eq(s.campaigns.accountId, accountId), isNull(s.positions.closedOn)))
+      .orderBy(s.positions.id);
+    return Promise.all(
+      positions.map(async ({ position }) => {
+        const legs = await db.select().from(s.legs).where(eq(s.legs.positionId, position.id));
+        const trades = await db
+          .select()
+          .from(s.trades)
+          .where(
+            inArray(
+              s.trades.legId,
+              legs.map((leg) => leg.id),
+            ),
+          );
+        return {
+          ...position,
+          legs: legs.map((leg) => ({
+            ...leg,
+            trades: trades.filter((event) => event.legId === leg.id),
+          })),
+        };
+      }),
+    );
+  }
+  return { createPosition, appendTrades, readOpenPositions };
+}
