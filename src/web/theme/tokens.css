@@ -1,0 +1,325 @@
+/* Strikes theme set: Ember, Paper, Graphite, Porcelain, Midnight, Terminal, Moss, Signal. Default Ember.
+   The theme selector sets <html data-theme="..."> and persists the choice. */
+
+:root,
+[data-theme="ember"] {
+  /* Ember (dark) */
+  --bg: #12100e;
+  --stage: #171411;
+  --panel: #1d1915;
+  --panel2: #25201b;
+  --raise: #2d2620;
+  --line: #3a322a;
+  --line2: #2a241e;
+  --text: #ece6dc;
+  --muted: #a89c8c;
+  --dim: #8f8476;
+  --accent: #e3b55b;
+  --on-accent: #1a1306;
+  --focus: #e3b55b;
+  --credit: #6cc4b0;
+  --debit: #ec8a6e;
+  --spread: #a79ee6;
+  --cc: #e3b55b;
+  --warn: #f2a65a;
+  --info: #8fb0f0;
+  --ccrow: #2e261b;
+  --hedgerow: #292528;
+  --swingrow: #21221d;
+  --hover: #27231f;
+  --credit-bg: #252a25;
+  --credit-line: #3b5a50;
+  --info-bg: #28282b;
+  --info-line: #485268;
+  --debit-bg: #32241e;
+  color-scheme: dark;
+}
+
+[data-theme="paper"] {
+  /* Paper (light) */
+  --bg: #ebe7de;
+  --stage: #f3f0e9;
+  --panel: #fbfaf6;
+  --panel2: #f3f0e8;
+  --raise: #e7e2d6;
+  --line: #d3ccbd;
+  --line2: #e3ddd1;
+  --text: #22201c;
+  --muted: #5c554b;
+  --dim: #6b6357;
+  --accent: #8a5a00;
+  --on-accent: #ffffff;
+  --focus: #8a5a00;
+  --credit: #23702b;
+  --debit: #ab2a1f;
+  --spread: #5546b8;
+  --cc: #7f5300;
+  --warn: #9a4d00;
+  --info: #2b58a8;
+  --ccrow: #ede8db;
+  --hedgerow: #edebf1;
+  --swingrow: #eef2ea;
+  --hover: #f2f1ed;
+  --credit-bg: #e8eee4;
+  --credit-line: #9abc9b;
+  --info-bg: #e8ebef;
+  --info-line: #9db1d3;
+  --debit-bg: #f5e9e5;
+  color-scheme: light;
+}
+
+[data-theme="graphite"] {
+  /* Graphite (dark) */
+  --bg: #0e0f11;
+  --stage: #131417;
+  --panel: #191b1f;
+  --panel2: #202328;
+  --raise: #282b31;
+  --line: #363a41;
+  --line2: #25282d;
+  --text: #e7e9ec;
+  --muted: #9ea5af;
+  --dim: #878e98;
+  --accent: #7aa2f7;
+  --on-accent: #0b1020;
+  --focus: #7aa2f7;
+  --credit: #4cc38a;
+  --debit: #f2766e;
+  --spread: #b39df3;
+  --cc: #e2b14a;
+  --warn: #f0a43c;
+  --info: #7aa2f7;
+  --ccrow: #2a2823;
+  --hedgerow: #272732;
+  --swingrow: #1c2324;
+  --hover: #232529;
+  --credit-bg: #1e2c2a;
+  --credit-line: #2c5b48;
+  --info-bg: #232935;
+  --info-line: #3e4e71;
+  --debit-bg: #2f2427;
+  color-scheme: dark;
+}
+
+[data-theme="porcelain"] {
+  /* Porcelain (light) */
+  --bg: #eef0f3;
+  --stage: #f7f8fa;
+  --panel: #ffffff;
+  --panel2: #f5f6f8;
+  --raise: #e9ecf0;
+  --line: #d3d8de;
+  --line2: #e5e8ec;
+  --text: #16181c;
+  --muted: #565d67;
+  --dim: #656c76;
+  --accent: #2a56cc;
+  --on-accent: #ffffff;
+  --focus: #2a56cc;
+  --credit: #127243;
+  --debit: #b92d27;
+  --spread: #6136c0;
+  --cc: #835500;
+  --warn: #9a4b00;
+  --info: #2a56cc;
+  --ccrow: #f1ece3;
+  --hedgerow: #f2eefa;
+  --swingrow: #f1f7f4;
+  --hover: #f6f6f6;
+  --credit-bg: #eaf2ee;
+  --credit-line: #94c0aa;
+  --info-bg: #ecf0fa;
+  --info-line: #9fb3e8;
+  --debit-bg: #f9eeee;
+  color-scheme: light;
+}
+
+[data-theme="midnight"] {
+  /* Midnight (dark) */
+  --bg: #0a0f1a;
+  --stage: #0e1422;
+  --panel: #131b2c;
+  --panel2: #19233a;
+  --raise: #202b45;
+  --line: #2e3c5a;
+  --line2: #1f2a41;
+  --text: #e6ecf7;
+  --muted: #98a6c0;
+  --dim: #808ea9;
+  --accent: #3fd0e0;
+  --on-accent: #04171a;
+  --focus: #3fd0e0;
+  --credit: #43d39e;
+  --debit: #ff7d88;
+  --spread: #ab9eff;
+  --cc: #f2c25b;
+  --warn: #ffad4d;
+  --info: #6aa8ff;
+  --ccrow: #262930;
+  --hedgerow: #21273f;
+  --swingrow: #152432;
+  --hover: #1e2536;
+  --credit-bg: #182d37;
+  --credit-line: #256157;
+  --info-bg: #1c2941;
+  --info-line: #34517c;
+  --debit-bg: #2b2535;
+  color-scheme: dark;
+}
+
+[data-theme="terminal"] {
+  /* Terminal (dark) */
+  --bg: #000000;
+  --stage: #050505;
+  --panel: #0d0d0d;
+  --panel2: #151515;
+  --raise: #1d1d1d;
+  --line: #303030;
+  --line2: #1d1d1d;
+  --text: #ebebeb;
+  --muted: #a0a0a0;
+  --dim: #858585;
+  --accent: #ffb000;
+  --on-accent: #1a1200;
+  --focus: #ffb000;
+  --credit: #33d17a;
+  --debit: #ff5f5a;
+  --spread: #c49cff;
+  --cc: #ffd166;
+  --warn: #ff8c1a;
+  --info: #5cb8ff;
+  --ccrow: #221e15;
+  --hedgerow: #1d1a23;
+  --swingrow: #0f1712;
+  --hover: #181818;
+  --credit-bg: #112118;
+  --credit-line: #1b5736;
+  --info-bg: #151e25;
+  --info-line: #2b4e69;
+  --debit-bg: #251515;
+  color-scheme: dark;
+}
+
+[data-theme="moss"] {
+  /* Moss (dark) */
+  --bg: #11130f;
+  --stage: #151812;
+  --panel: #1b1f17;
+  --panel2: #22271d;
+  --raise: #2a3124;
+  --line: #384131;
+  --line2: #272d22;
+  --text: #e8eadf;
+  --muted: #a3a993;
+  --dim: #8a907b;
+  --accent: #b5d36a;
+  --on-accent: #141a05;
+  --focus: #b5d36a;
+  --credit: #9ccf6e;
+  --debit: #f08e6c;
+  --spread: #a6a7ee;
+  --cc: #e2b75c;
+  --warn: #f0a24a;
+  --info: #86b3e8;
+  --ccrow: #2c2c1d;
+  --hedgerow: #282b2a;
+  --swingrow: #21281b;
+  --hover: #252921;
+  --credit-bg: #283120;
+  --credit-line: #4c6238;
+  --info-bg: #262e2c;
+  --info-line: #445766;
+  --debit-bg: #302a20;
+  color-scheme: dark;
+}
+
+[data-theme="signal"] {
+  /* Signal (dark) */
+  --bg: #0f1012;
+  --stage: #141518;
+  --panel: #1a1c20;
+  --panel2: #212328;
+  --raise: #292c32;
+  --line: #373a41;
+  --line2: #26292e;
+  --text: #e9eaec;
+  --muted: #a0a4ac;
+  --dim: #888c95;
+  --accent: #e9eaec;
+  --on-accent: #111214;
+  --focus: #e9eaec;
+  --credit: #4da3ff;
+  --debit: #ff9a3d;
+  --spread: #c3a6ff;
+  --cc: #e6d27a;
+  --warn: #ffd24a;
+  --info: #c3a6ff;
+  --ccrow: #2b2b28;
+  --hedgerow: #292834;
+  --swingrow: #1d232b;
+  --hover: #24262a;
+  --credit-bg: #1f2a36;
+  --credit-line: #2d4f75;
+  --info-bg: #2b2a36;
+  --info-line: #5a5075;
+  --debit-bg: #312923;
+  color-scheme: dark;
+}
+
+/* No saved choice yet: follow the OS. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    /* Paper (light) */
+    --bg: #ebe7de;
+    --stage: #f3f0e9;
+    --panel: #fbfaf6;
+    --panel2: #f3f0e8;
+    --raise: #e7e2d6;
+    --line: #d3ccbd;
+    --line2: #e3ddd1;
+    --text: #22201c;
+    --muted: #5c554b;
+    --dim: #6b6357;
+    --accent: #8a5a00;
+    --on-accent: #ffffff;
+    --focus: #8a5a00;
+    --credit: #23702b;
+    --debit: #ab2a1f;
+    --spread: #5546b8;
+    --cc: #7f5300;
+    --warn: #9a4d00;
+    --info: #2b58a8;
+    --ccrow: #ede8db;
+    --hedgerow: #edebf1;
+    --swingrow: #eef2ea;
+    --hover: #f2f1ed;
+    --credit-bg: #e8eee4;
+    --credit-line: #9abc9b;
+    --info-bg: #e8ebef;
+    --info-line: #9db1d3;
+    --debit-bg: #f5e9e5;
+    color-scheme: light;
+  }
+}
+
+/* Type, spacing and radii: still the plan's placeholders, shared by every theme.
+   System font stacks: the app is auth-gated and works offline, so no third-party font requests. */
+:root {
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fs-1: 10.5px;
+  --fs-2: 12px;
+  --fs-3: 13.5px;
+  --fs-4: 15px;
+  --fs-5: 19px;
+  --fs-6: 24px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 22px;
+  --sp-6: 32px;
+  --r-1: 6px;
+  --r-2: 8px;
+  --r-3: 12px;
+}

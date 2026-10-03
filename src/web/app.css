@@ -1,0 +1,159 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-3);
+  line-height: 1.45;
+}
+button,
+select {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+h1 {
+  font-size: var(--fs-5);
+  font-weight: 600;
+  margin: 0 0 var(--sp-1);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.label {
+  font-size: var(--fs-1);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tone-credit {
+  color: var(--credit);
+}
+.tone-debit {
+  color: var(--debit);
+}
+.tone-spread {
+  color: var(--spread);
+}
+.tone-cc {
+  color: var(--cc);
+}
+.tone-muted {
+  color: var(--muted);
+}
+.tone-dim {
+  color: var(--dim);
+}
+
+/* The container, not the viewport, picks the layout: below 760px the Sheet becomes cards. */
+.frame {
+  container: app / inline-size;
+  min-height: 100dvh;
+  background: var(--stage);
+}
+.app {
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  min-height: 100dvh;
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-3);
+  border-right: 1px solid var(--line2);
+  background: var(--bg);
+}
+.logo {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0 var(--sp-2) var(--sp-3);
+}
+.side nav {
+  flex: 1;
+}
+.nav-link {
+  display: block;
+  padding: var(--sp-2);
+  border-radius: var(--r-2);
+  color: var(--muted);
+  text-decoration: none;
+}
+.nav-link[aria-current="page"] {
+  background: var(--raise);
+  color: var(--text);
+}
+.theme-select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.theme-select select {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  padding: var(--sp-2);
+}
+.main {
+  min-width: 0;
+  padding: var(--sp-5) var(--sp-5) var(--sp-6);
+}
+.subtitle {
+  margin: 0 0 var(--sp-4);
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+@container app (max-width: 760px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+  .side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sp-3) var(--sp-4);
+    border-right: 0;
+    border-bottom: 1px solid var(--line2);
+  }
+  .logo {
+    padding: 0;
+  }
+  .side nav {
+    display: none;
+  }
+  .theme-select {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .theme-select select {
+    padding: var(--sp-1) var(--sp-2);
+  }
+  .main {
+    padding: var(--sp-3) var(--sp-4) var(--sp-6);
+  }
+  h1 {
+    font-size: var(--fs-4);
+  }
+}
