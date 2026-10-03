@@ -1,0 +1,13 @@
+import { expect, it, vi } from "vitest";
+
+it("asserts nothing useful", () => {
+  const fn = vi.fn();
+  expect(1).toBeDefined();
+  expect(1).not.toBeDefined();
+  expect(1).toBeTruthy();
+  expect(0).not.toBeTruthy();
+  expect(0).toBeFalsy();
+  expect(1).not.toBeFalsy();
+  expect(fn).toHaveBeenCalled();
+  expect(fn).not.toHaveBeenCalled();
+});

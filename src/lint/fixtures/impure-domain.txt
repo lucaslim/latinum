@@ -1,0 +1,5 @@
+import { Hono } from "hono";
+import { readFileSync } from "node:fs";
+import { createRepository } from "../db/repository.ts";
+
+export const impure = [Hono, readFileSync, createRepository];

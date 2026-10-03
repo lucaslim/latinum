@@ -1,0 +1,7 @@
+import { expect, it, vi } from "vitest";
+
+it("asserts literals", () => {
+  const fn = vi.fn();
+  expect(218).toBe(218);
+  expect(fn).toHaveBeenCalledWith("x");
+});

@@ -33,6 +33,7 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.{ts,tsx}"],
     environment: "node",
+    expect: { requireAssertions: true },
     coverage: {
       provider: "v8",
       include: ["src/domain/**/*.ts", "src/db/repository.ts", "src/db/money.ts", "src/db/book.ts"],

@@ -2,5 +2,59 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "formatter": { "indentStyle": "space", "lineWidth": 100 },
-  "assist": { "actions": { "source": { "organizeImports": "on" } } }
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "overrides": [
+    {
+      "includes": ["src/domain/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "hono": "src/domain is pure: no I/O, framework or layer imports.",
+                  "react": "src/domain is pure: no I/O, framework or layer imports.",
+                  "react-dom": "src/domain is pure: no I/O, framework or layer imports.",
+                  "drizzle-orm": "src/domain is pure: no I/O, framework or layer imports."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "hono/**",
+                      "react/**",
+                      "react-dom/**",
+                      "drizzle-orm/**",
+                      "node:*",
+                      "@hono/**",
+                      "@neondatabase/**",
+                      "@electric-sql/**"
+                    ],
+                    "message": "src/domain is pure: no I/O, framework or layer imports."
+                  },
+                  {
+                    "group": ["**/api", "**/api/**", "**/web", "**/web/**", "**/db", "**/db/**"],
+                    "message": "src/domain is pure: no I/O, framework or layer imports."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/domain/**",
+        "!src/domain/**/*.test.ts",
+        "!src/domain/test/**",
+        "!src/domain/money.ts"
+      ],
+      "plugins": ["./biome/no-float-money.grit"]
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx"],
+      "plugins": ["./biome/no-weak-matchers.grit"]
+    }
+  ]
 }

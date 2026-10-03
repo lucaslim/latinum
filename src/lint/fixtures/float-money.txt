@@ -1,0 +1,3 @@
+export const cents = parseFloat("1.09") * 100;
+export const asNumber = Number("1.09");
+export const rounded = Math.round(1.005 * 100);

@@ -1,0 +1,12 @@
+or {
+  `expect($x).$m()`,
+  `expect($x).not.$m()`
+} where {
+  $m <: or {
+    `toBeDefined`,
+    `toBeTruthy`,
+    `toBeFalsy`,
+    `toHaveBeenCalled`
+  },
+  register_diagnostic(span=$m, message="Weak matcher: assert a literal value or the call payload instead.")
+}

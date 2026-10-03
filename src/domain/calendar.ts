@@ -61,7 +61,7 @@ const earlyCloses = new Set(Object.values(TABLE).flatMap((y) => y.earlyCloses.ma
 
 /** Throws outside the table: a wrong "open" answer is worse than a loud stop. */
 function assertCovered(date: IsoDate): void {
-  const year = Number(date.slice(0, 4));
+  const year = new Date(`${date}T00:00:00Z`).getUTCFullYear();
   if (year < FIRST_YEAR || year > LAST_YEAR) {
     throw new RangeError(
       `NYSE calendar covers ${FIRST_YEAR}-${LAST_YEAR}; add ${year} to src/domain/calendar.ts`,

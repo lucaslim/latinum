@@ -1,0 +1,8 @@
+`$fn($args)` where {
+  $fn <: or {
+    `parseFloat`,
+    `Number`,
+    `Math.round`
+  },
+  register_diagnostic(span=$fn, message="src/domain: money and prices are Money4 integers; use the Money4 parse/format helpers, not float conversion.")
+}
