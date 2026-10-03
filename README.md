@@ -31,18 +31,20 @@ scripts/smoke.sh https://trading-journal-r8lqy6j1u-lucaslims-projects-af1d1be4.v
 ```
 
 The URL came from the successful GitHub Production deployment's `environment_url`.
+Every deployment URL, including older ones, sits behind the same Vercel Authentication.
 The script checks anonymous GET and HEAD on `/` and `/api/health`, without cookies
 or redirect following. Only the observed 302 redirect to `https://vercel.com/sso-api`
 passes; application responses and transport errors fail.
 
-The installable manifest uses credentialed fetching and starts on that production
-origin. The service worker caches static assets only and excludes `/api/` navigation.
+The installable manifest uses credentialed fetching, and its `start_url` is `/` so the
+installed app always starts on the origin it was installed from. The service worker caches static assets only and excludes `/api/` navigation.
 
 The daily `0 10 * * *` UTC cron targets `/api/cron/heartbeat`. Its handler fails
 closed unless `CRON_SECRET` matches the bearer token; no secret is provisioned by
-this change. `HeartbeatWriter` in `src/api/cron.ts` is the typed persistence seam,
-currently a no-op. Database wiring, production cron proof, and installed iPhone
-login/persistence testing remain follow-up work.
+this change. `HeartbeatWriter` in `src/api/cron.ts` is the persistence seam; the app
+injects `neonHeartbeatWriter` (`src/api/heartbeat.ts`), which connects with `DATABASE_URL`
+and inserts a `platform_heartbeat` row (`source = 'vercel-cron'`) through the repository.
+A failed write returns 500 so a broken connection shows up in the cron log.
 
 ## Layout
 
@@ -73,3 +75,24 @@ Only a successful main-push CI check unlocks `pnpm db:migrate`, using the job-sc
 DB, and no CI seed. The owner connection string must never go into Vercel. The SQL-created
 `app_rw` role has no initial password; later provisioning sets it without rerunning or
 changing the role migration. Live production privilege proof belongs to that provisioning.
+
+## Connecting production
+
+The `Connect production` workflow (`.github/workflows/connect-production.yml`) is
+`workflow_dispatch` only and refuses to run outside `main`. Run it after the migration job
+has applied the schema:
+
+```sh
+gh workflow run connect-production.yml --ref main -f action=provision
+gh workflow run connect-production.yml --ref main -f action=verify-heartbeat   # after 10:00 UTC
+```
+
+`provision` runs `scripts/connect-production.ts` in one job: it generates a password and sets
+it on `app_rw` through `DATABASE_URL_OWNER`, connects as `app_rw` to prove normal DML works
+and `CREATE`, `ALTER`, `DROP`, `TRUNCATE` and reading `drizzle.__drizzle_migrations` fail with
+SQLSTATE `42501`, creates `CRON_SECRET` in Vercel if absent, upserts `DATABASE_URL` (pooled
+host, `app_rw`) for the Production target only, and redeploys the production build of that
+commit. Secret values are registered with `::add-mask::`, never printed, and never leave the
+job except into Vercel. Re-running rotates the `app_rw` password and resyncs Vercel. It
+refuses to touch a `DATABASE_URL` that also targets Preview or Development. `verify-heartbeat`
+reads the latest `vercel-cron` rows back from Neon as the owner.

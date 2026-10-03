@@ -19,9 +19,7 @@ describe("vite build", () => {
     const html = readFileSync(indexPath, "utf8");
     expect(html).toMatch(/<link[^>]+rel="manifest"[^>]+crossorigin="use-credentials"/);
     const manifest = JSON.parse(readFileSync(join(outDir, "manifest.webmanifest"), "utf8"));
-    expect(manifest.start_url).toBe(
-      "https://trading-journal-r8lqy6j1u-lucaslims-projects-af1d1be4.vercel.app/",
-    );
+    expect(manifest.start_url).toBe("/");
     expect(manifest.display).toBe("standalone");
     for (const size of [192, 512]) {
       const icon = manifest.icons.find(

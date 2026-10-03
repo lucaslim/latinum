@@ -3,7 +3,7 @@ import type { Handler } from "hono";
 
 export type HeartbeatWriter = (heartbeat: { receivedAt: Date }) => Promise<void>;
 
-// T2b supplies persistence here; the platform spike deliberately writes nothing.
+// Defaults to a no-op so the route is testable without a database; the app injects the Neon writer.
 export function heartbeatRoute(writeHeartbeat: HeartbeatWriter = async () => {}): Handler {
   return async (c) => {
     const secret = process.env.CRON_SECRET;

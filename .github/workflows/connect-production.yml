@@ -1,0 +1,47 @@
+name: Connect production
+
+# Manual and main-only: this is the one place the owner connection string meets the Vercel token,
+# and both values only move between GitHub secrets, Neon and Vercel inside the job.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: provision = set the app_rw password, prove denial, set Vercel env, redeploy
+        type: choice
+        options:
+          - provision
+          - verify-heartbeat
+        default: provision
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-migrate
+  cancel-in-progress: false
+
+jobs:
+  connect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Provision app_rw, Vercel Production env and redeploy
+        if: inputs.action == 'provision'
+        env:
+          DATABASE_URL_OWNER: ${{ secrets.DATABASE_URL_OWNER }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT: trading-journal
+          VERCEL_TEAM_SLUG: lucaslims-projects
+        run: pnpm exec tsx scripts/connect-production.ts
+      - name: Read back vercel-cron heartbeat rows
+        if: inputs.action == 'verify-heartbeat'
+        env:
+          DATABASE_URL_OWNER: ${{ secrets.DATABASE_URL_OWNER }}
+        run: pnpm exec tsx scripts/verify-heartbeat.ts

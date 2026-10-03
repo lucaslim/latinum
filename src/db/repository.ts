@@ -90,5 +90,8 @@ export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
       }),
     );
   }
-  return { createPosition, appendTrades, readOpenPositions };
+  async function recordHeartbeat(heartbeat: typeof s.platformHeartbeat.$inferInsert) {
+    await db.insert(s.platformHeartbeat).values(heartbeat);
+  }
+  return { createPosition, appendTrades, readOpenPositions, recordHeartbeat };
 }
