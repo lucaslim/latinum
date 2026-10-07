@@ -173,6 +173,7 @@ describe("trade HTTP boundary", () => {
     { ...dram, price: "0" },
     { ...dram, quantity: 0 },
     { ...dram, quantity: 1.5 },
+    { ...dram, quantity: 2147483647, strike: "99999999.9999", price: "0.0001", fees: "0" },
     { ...dram, underlying: "dram" },
     { ...dram, expiry: "2026-09-25" },
     { ...dram, openedOn: "0000-09-25" },

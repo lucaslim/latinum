@@ -28,6 +28,14 @@ describe("shared trade contracts", () => {
     { ...dram, openedOn: "0000-01-01" },
     { ...dram, quantity: 2147483647 },
     { ...dram, price: "50" },
+    {
+      ...dram,
+      strategy: "cc",
+      quantity: 10000,
+      strike: "900000",
+      price: "1000",
+      cover: { kind: "held", basis: "1" },
+    },
     { ...dram, strategy: "cc", quantity: 2147483647, cover: { kind: "held", basis: "55" } },
     { ...dram, strategy: "cc", quantity: 1000000, cover: { kind: "held", basis: "99999999" } },
   ])("rejects invalid or server-owned fields: %j", (body) => {

@@ -546,7 +546,8 @@ describe("assigned covered calls", () => {
     expect(await counts()).toEqual({ accounts: 1, campaigns: 1, positions: 4, legs: 4, trades: 5 });
   });
 
-  test("rechecks capacity on save and serializes competing covering calls", async () => {
+  // PGlite serializes transactions: this checks capacity handling, not PostgreSQL row locks.
+  test("rechecks capacity for competing covering saves on PGlite", async () => {
     const ids = await assignmentFixture(database.db);
     const result = await Promise.allSettled([
       repo().create(assignedCall(ids.stockLegId, 10)),
