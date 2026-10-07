@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { parseIsoDate } from "../../domain/dates.ts";
+import { parseMoney4 as m } from "../../domain/money.ts";
 import type { Position } from "../../domain/positions.ts";
 import type { OpenPosition } from "../../domain/sheet.ts";
 import { coveredBook, cspBook, discordBook, prototypeBook } from "../../domain/test/fixtures.ts";
@@ -57,6 +58,47 @@ describe("Sheet footer", () => {
     expect(footer(html)).toContain("—");
     expect(text(slice(html, "section"))).toContain("77 contracts open");
   });
+});
+
+it("counts split held CC rows as one real position and keeps residual capital", () => {
+  const html = renderToStaticMarkup(
+    <PositionsSheet
+      asOf={asOf}
+      positions={[
+        {
+          id: "held-cc",
+          campaignId: "dram",
+          strategy: "cc",
+          role: "income",
+          underlying: "DRAM",
+          openedOn: parseIsoDate("2026-09-18"),
+          expiry: parseIsoDate("2026-10-16"),
+          strike: m("55"),
+          basis: m("53"),
+          qty: 10,
+          price: m("1.10"),
+          adjusted: false,
+        },
+        {
+          id: "held-cc",
+          campaignId: "dram",
+          strategy: "stock",
+          role: "swing",
+          underlying: "DRAM",
+          openedOn: parseIsoDate("2026-09-18"),
+          shares: 500,
+          price: m("53"),
+        },
+      ]}
+      onEdit={() => {}}
+    />,
+  );
+  expect(text(html)).toContain("1 open position");
+  expect(text(html)).not.toContain("2 open positions");
+  expect(footer(html)).toContain("swings $26,500");
+  expect(footer(html)).toContain("deployed $81,500");
+  expect(slice(html, "tbody").match(/Edit DRAM trade/g)).toHaveLength(2);
+  expect(html.match(/href="#\/campaigns\/dram"/g)).toHaveLength(4);
 });
 
 describe("Sheet rows", () => {

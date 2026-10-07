@@ -13,6 +13,7 @@ import {
   LifecycleValidationError,
   lifecycleRepository,
 } from "../db/lifecycle.ts";
+import { CoveredStockConflictError } from "../db/repository.ts";
 import { todayNY } from "../domain/dates.ts";
 import type { PositionsDeps } from "./positions.ts";
 
@@ -65,7 +66,8 @@ export function lifecycleRoute(action: LifecycleAction, { withDb, now }: Positio
       return result ? c.json(result) : c.json({ error: "Position or campaign not found" }, 404);
     } catch (error) {
       if (error instanceof LifecycleValidationError) return c.json({ error: error.message }, 400);
-      if (error instanceof LifecycleConflictError) return c.json({ error: error.message }, 409);
+      if (error instanceof LifecycleConflictError || error instanceof CoveredStockConflictError)
+        return c.json({ error: error.message }, 409);
       throw error;
     }
   };

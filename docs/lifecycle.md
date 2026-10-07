@@ -48,9 +48,20 @@ exactly. Closing cash and fees are added only to that close's net P/L, and its o
 pool. Reopening after a full close starts a fresh pool. Invalid quantities and over-closing
 fail rather than manufacturing a realized amount.
 
-## Pending T6 integration
+## Assigned-share covered-call handoff
 
-This PR stays draft until PR #17 merges. The assignment UI retains `stockLegId` and wheel
-basis and displays the covered-call offer as unavailable pending trade-form integration.
-There is intentionally no duplicate T6 form, create endpoint or invented navigation contract.
-After T6 merges, wire the offer to its assigned-share prefill and mark the PR ready.
+After assignment, “Sell covered call” opens the existing trade form. The campaign passes
+only the stock-leg ID; the form loads authoritative assigned-share options, preselects CC,
+ticker, uncovered contract quantity and the existing stock leg, and displays its read-only
+wheel basis. Saving uses `cover: { kind: "assigned", stockLegId }` and the existing
+`covered_leg_id` relationship, never a second stock opening fill. The form closes and the
+campaign refreshes after a successful save.
+
+Partial covered-call closes release stock coverage. The Sheet and campaign view expose
+uncovered shares separately without duplicating covered capital. Stock closes that would
+uncover assigned calls fail atomically with 409. Both held-share and referenced assigned-share
+calls use the same strategy model.
+
+If a lifecycle POST commits but its refresh fails, the campaign replaces stale action forms
+with an error and a read-only retry. Another mutation is blocked until the campaign reloads;
+retrying the read never resubmits the saved mutation.

@@ -8,6 +8,12 @@ export type NewTrade = Omit<typeof s.trades.$inferInsert, "legId">;
 export type NewLeg = Omit<typeof s.legs.$inferInsert, "positionId"> & { trades: NewTrade[] };
 export type NewPosition = Omit<typeof s.positions.$inferInsert, "closedOn"> & { legs: NewLeg[] };
 
+export class CoveredStockConflictError extends Error {
+  constructor() {
+    super("Covered calls exceed stock balance");
+  }
+}
+
 export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
   async function appendTrades(positionId: string, events: (typeof s.trades.$inferInsert)[]) {
     return db.transaction(async (tx) => {
@@ -84,8 +90,7 @@ export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
                 );
               return shares + quantity * leg.multiplier;
             }, 0);
-          if ((balances.get(stock.id) ?? 0) < covered)
-            throw new Error("Covered calls exceed stock balance");
+          if ((balances.get(stock.id) ?? 0) < covered) throw new CoveredStockConflictError();
         }
       }
       return closedOn;

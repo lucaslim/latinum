@@ -90,10 +90,13 @@ export function useCampaign(id: string) {
     try {
       data = await fetchCampaign(id, request.abort.signal);
     } catch (error) {
-      throw new Error(
-        "Lifecycle action was saved, but campaign refresh failed. Reload the campaign before another action.",
-        { cause: error },
-      );
+      const message =
+        "Lifecycle action was saved, but campaign refresh failed. Reload the campaign before another action.";
+      if (active.current === request) {
+        active.current = null;
+        setLoad({ status: "error", message });
+      }
+      throw new Error(message, { cause: error });
     }
     if (
       !request.abort.signal.aborted &&

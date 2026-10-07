@@ -7,6 +7,7 @@ import { repository } from "../db/repository.ts";
 import * as s from "../db/schema.ts";
 import { testDatabase } from "../db/test/database.ts";
 import type { CampaignResponse } from "../domain/campaign.ts";
+import { buildCampaignView } from "../domain/campaignMetrics.ts";
 import { parseMoney4 as m } from "../domain/money.ts";
 import { createApp } from "./app.ts";
 
@@ -143,6 +144,117 @@ test("DRAM assignment books 2990.10, opens 1500 shares at 55 and records basis53
     price: 550000,
     cash: -825000000,
   });
+});
+
+async function assignedCall() {
+  const fixture = await put("DRAM", 15, "2", "3000", "-9.90", "55");
+  const assigned = await post(fixture.positionId, "assign", { legId: fixture.legId });
+  assert.equal(assigned.status, 200);
+  const { assignment } = (await assigned.json()) as LifecycleResponse;
+  assert(assignment);
+  const saved = await app.request("/api/positions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      strategy: "cc",
+      underlying: "DRAM",
+      openedOn: "2026-10-16",
+      expiry: "2026-11-20",
+      quantity: 15,
+      adjusted: false,
+      strike: "55",
+      price: "1.10",
+      fees: "9.90",
+      tags: [],
+      cover: { kind: "assigned", stockLegId: assignment.stockLegId },
+    }),
+  });
+  assert.equal(saved.status, 201);
+  const { positionId } = (await saved.json()) as { positionId: string };
+  const [call] = await database.db.select().from(s.legs).where(eq(s.legs.positionId, positionId));
+  assert(call);
+  return { fixture, assignment, positionId, call };
+}
+
+test("assigned CC partial5/15 closes through HTTP and exposes only500 uncovered shares", async () => {
+  const { fixture, positionId, call } = await assignedCall();
+  const campaign = (await (
+    await app.request(`/api/campaigns/${fixture.campaignId}`)
+  ).json()) as CampaignResponse;
+  expect(campaign.positions.flatMap((p) => p.legs).find((l) => l.id === call.id)).toHaveProperty(
+    "coveredLegId",
+    call.coveredLegId,
+  );
+  expect(buildCampaignView(campaign).coveredCalls).toMatchObject([
+    { basis: 530000, adjustedBasis: 519000 },
+  ]);
+  expect(buildCampaignView(campaign).swings).toEqual([]);
+  const closed = await post(positionId, "close", {
+    fills: [{ legId: call.id, quantity: 5, price: "0.40" }],
+  });
+  expect(closed.status).toBe(200);
+  expect(((await closed.json()) as LifecycleResponse).realized).toMatchObject([
+    { quantity: 5, pnl: 3467000 },
+  ]);
+  const after = (await (
+    await app.request(`/api/campaigns/${fixture.campaignId}`)
+  ).json()) as CampaignResponse;
+  expect(buildCampaignView(after).swings).toMatchObject([
+    { quantity: 500, entry: 550000, assignmentBasis: 530000 },
+  ]);
+});
+
+test("selling assigned stock that uncovers calls is409 and rolls back all bookings", async () => {
+  const { assignment } = await assignedCall();
+  const before = await database.db
+    .select()
+    .from(s.trades)
+    .where(eq(s.trades.legId, assignment.stockLegId));
+  const rejected = await post(assignment.stockPositionId, "close", {
+    fills: [{ legId: assignment.stockLegId, quantity: 500, price: "55" }],
+  });
+  expect(rejected.status).toBe(409);
+  expect(await rejected.json()).toEqual({ error: "Covered calls exceed stock balance" });
+  expect(
+    await database.db.select().from(s.trades).where(eq(s.trades.legId, assignment.stockLegId)),
+  ).toEqual(before);
+  expect(
+    (
+      await database.db
+        .select()
+        .from(s.positions)
+        .where(eq(s.positions.id, assignment.stockPositionId))
+    )[0]?.closedOn,
+  ).toBeNull();
+});
+
+test("assigned stock sale retains exact remaining coverage after partial call close", async () => {
+  const { assignment, positionId, call } = await assignedCall();
+  expect(
+    (await post(positionId, "close", { fills: [{ legId: call.id, quantity: 5, price: "0.40" }] }))
+      .status,
+  ).toBe(200);
+  expect(
+    (
+      await post(assignment.stockPositionId, "close", {
+        fills: [{ legId: assignment.stockLegId, quantity: 500, price: "55" }],
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await post(assignment.stockPositionId, "close", {
+        fills: [{ legId: assignment.stockLegId, quantity: 1, price: "55" }],
+      })
+    ).status,
+  ).toBe(409);
+  const book = (await repository(database.db).readOpenBook()).find(
+    (p) => p.id === assignment.stockPositionId,
+  );
+  expect(book?.legs[0]?.trades.map((t) => [t.action, t.quantity])).toEqual([
+    ["open", 1500],
+    ["close", 500],
+  ]);
 });
 
 test("partial5/10 allocates cash and opening fees pro rata and leaves5 open", async () => {
@@ -286,7 +398,7 @@ test("uppercase leg UUIDs close and assign the same stored legs", async () => {
   });
 });
 
-test("held-cover shares accept a manual mark after the call expires, but not while covered", async () => {
+test("held-cover shares accept marks when partially or fully released, but not while fully covered", async () => {
   const fixture = await put("DRAM", 15, "2", "3000", "-9.90", "55");
   const stockLegId = randomUUID();
   const cc = await repository(database.db).createPosition({
@@ -337,6 +449,24 @@ test("held-cover shares accept a manual mark after the call expires, but not whi
       body: JSON.stringify({ price: "55" }),
     });
   expect((await mark()).status).toBe(409);
+  const call = (await database.db.select().from(s.legs).where(eq(s.legs.positionId, cc))).find(
+    (leg) => leg.kind === "call",
+  );
+  assert(call);
+  expect(
+    (
+      await post(cc, "close", {
+        fills: [{ legId: call.id, quantity: 5, price: "0" }],
+      })
+    ).status,
+  ).toBe(200);
+  expect((await mark()).status).toBe(200);
+  const campaign = (await (
+    await app.request(`/api/campaigns/${fixture.campaignId}`)
+  ).json()) as CampaignResponse;
+  expect(buildCampaignView(campaign).swings).toMatchObject([
+    { legId: stockLegId, quantity: 500, entry: 530000, unrealized: 10000000 },
+  ]);
   expect((await post(cc, "expire", {})).status).toBe(200);
   const marked = await mark();
   expect(marked.status).toBe(200);

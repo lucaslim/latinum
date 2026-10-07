@@ -97,6 +97,7 @@ export function campaignRepository(db: Database) {
                   expiry: leg.expiry === null ? null : parseIsoDate(leg.expiry),
                   multiplier: leg.multiplier,
                   adjusted: leg.adjusted,
+                  coveredLegId: leg.coveredLegId,
                   trades: trades
                     .filter((t) => t.legId === leg.id)
                     .map((t) => ({
@@ -138,6 +139,12 @@ export function campaignRepository(db: Database) {
         .for("update");
       if (!row) return null;
       if (row.position.closedOn !== null) throw new ManualMarkConflictError();
+      const trades = await tx.select().from(s.trades).where(eq(s.trades.legId, legId));
+      const balance = trades.reduce(
+        (n, t) => n + (t.action === "open" ? t.quantity : -t.quantity),
+        0,
+      );
+      if (balance <= 0) throw new ManualMarkConflictError();
       if (row.position.role !== "swing") {
         // Held-cover history stays a CC; only its surviving, uncovered stock becomes a swing.
         if (row.position.strategy !== "cc" || row.leg.kind !== "stock" || row.leg.side !== "long")
@@ -160,22 +167,17 @@ export function campaignRepository(db: Database) {
               options.map((leg) => leg.id),
             ),
           );
-        if (
-          options.some(
-            (leg) =>
-              optionTrades
-                .filter((t) => t.legId === leg.id)
-                .reduce((n, t) => n + (t.action === "open" ? t.quantity : -t.quantity), 0) !== 0,
-          )
-        )
+        const coveredShares = options
+          .filter((leg) => leg.kind === "call" && leg.side === "short" && leg.coveredLegId === null)
+          .reduce((shares, leg) => {
+            const quantity = optionTrades
+              .filter((t) => t.legId === leg.id)
+              .reduce((n, t) => n + (t.action === "open" ? t.quantity : -t.quantity), 0);
+            return shares + BigInt(quantity) * BigInt(leg.multiplier);
+          }, 0n);
+        if (BigInt(balance) * BigInt(row.leg.multiplier) <= coveredShares)
           throw new ManualMarkConflictError();
       }
-      const trades = await tx.select().from(s.trades).where(eq(s.trades.legId, legId));
-      const balance = trades.reduce(
-        (n, t) => n + (t.action === "open" ? t.quantity : -t.quantity),
-        0,
-      );
-      if (balance <= 0) throw new ManualMarkConflictError();
       const historicalBalance = trades
         .filter((t) => t.tradeDate <= mark.asOf)
         .reduce((n, t) => n + (t.action === "open" ? t.quantity : -t.quantity), 0);

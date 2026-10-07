@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CalendarCoverageError, FIRST_YEAR, LAST_YEAR } from "../../domain/calendar.ts";
 import type { IsoDate } from "../../domain/dates.ts";
 import { expiryChips } from "../../domain/expiry.ts";
@@ -6,6 +6,7 @@ import { formatMoney4, type Money4 } from "../../domain/money.ts";
 import type { Metrics } from "../../domain/positions.ts";
 import { tagSuggestions, tickerSuggestions } from "../../shared/symbols.ts";
 import {
+  type AssignedStockOption,
   STRATEGY_LABELS,
   TRADE_STRATEGIES,
   type TradeFormOptions,
@@ -72,17 +73,19 @@ export function DerivedTradeMetrics({
 export function TradeForm({
   asOf,
   options,
+  assignedStock,
   onSaved,
   onCancel,
 }: {
   asOf: IsoDate;
   options: TradeFormOptions;
+  assignedStock?: AssignedStockOption;
   onSaved: () => void;
   onCancel: () => void;
 }) {
   const id = useId();
-  const [strategy, setStrategy] = useState<TradeStrategy>("csp");
-  const [ticker, setTicker] = useState("");
+  const [strategy, setStrategy] = useState<TradeStrategy>(assignedStock ? "cc" : "csp");
+  const [ticker, setTicker] = useState(assignedStock?.underlying ?? "");
   const [openedOn, setOpenedOn] = useState<string>(asOf);
   let chips: ReturnType<typeof expiryChips> = [];
   let calendarUnsupported = false;
@@ -93,7 +96,9 @@ export function TradeForm({
     calendarUnsupported = true;
   }
   const [expiry, setExpiry] = useState<string>(chips[0]?.date ?? "");
-  const [quantity, setQuantity] = useState("1");
+  const [quantity, setQuantity] = useState(
+    assignedStock ? String(Math.floor(assignedStock.uncoveredShares / 100)) : "1",
+  );
   const [strike, setStrike] = useState("");
   const [price, setPrice] = useState("");
   const [fees, setFees] = useState<string | null>(null);
@@ -105,7 +110,7 @@ export function TradeForm({
   const [shortFees, setShortFees] = useState<string | null>(null);
   const [role, setRole] = useState<"hedge" | "swing">("hedge");
   const [adjusted, setAdjusted] = useState(false);
-  const [cover, setCover] = useState("held");
+  const [cover, setCover] = useState(assignedStock?.legId ?? "held");
   const [basis, setBasis] = useState("");
   const [tag, setTag] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -113,6 +118,13 @@ export function TradeForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const busy = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const stock = strategy === "stock" || strategy === "day_trade";
   const spread = strategy.endsWith("_spread");
   const hasRole = strategy.includes("debit") || strategy.startsWith("long_");
@@ -181,12 +193,13 @@ export function TradeForm({
     try {
       await createTrade(preview.input);
     } catch (cause) {
+      if (!mounted.current) return;
       setError(cause instanceof Error ? cause.message : String(cause));
       busy.current = false;
       setSaving(false);
       return;
     }
-    onSaved();
+    if (mounted.current) onSaved();
   }
 
   return (

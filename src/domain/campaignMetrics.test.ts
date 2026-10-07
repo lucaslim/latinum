@@ -296,7 +296,7 @@ describe("open balances and basis", () => {
     expect(c).toEqual(recorded);
   });
 
-  it("restores exact CC backing by aggregating open stock lots", () => {
+  it("does not guess legacy backing across multiple stock legs", () => {
     const c = clone(dramCampaign);
     leg(c).trades.push({ ...closing(50), price: m("53"), cash: m("2650") });
     const extraStock = clone(dramCampaign).positions[0];
@@ -321,10 +321,8 @@ describe("open balances and basis", () => {
     ];
     c.positions.push(extraStock);
     expect(buildCampaignView(c)).toMatchObject({
-      coveredCalls: [
-        { shares: 1500, basis: m("53"), adjustedBasis: m("51.90"), calledAwayGain: m("4650") },
-      ],
-      unsupportedPositionIds: [],
+      coveredCalls: [],
+      unsupportedPositionIds: ["dram-call"],
     });
     leg(c, 2).trades.push({ ...closing(1), price: m("53"), cash: m("53") });
     expect(buildCampaignView(c)).toMatchObject({
@@ -434,6 +432,92 @@ describe("open balances and basis", () => {
       "aapl-call-open",
       "z-close",
     ]);
+  });
+});
+
+describe("explicit covered leg and residual capital", () => {
+  it("references the exact assigned leg despite another same-underlying stock basis", () => {
+    const c = clone(dramAssignedCampaign);
+    leg(c, 2).coveredLegId = "dram-assigned-stock-leg";
+    const extra = clone(dramCampaign).positions[0];
+    if (!extra) throw new Error("Missing stock fixture");
+    extra.id = "other-stock";
+    extra.legs[0] = {
+      ...leg(dramCampaign),
+      id: "other-stock-leg",
+      trades: [
+        {
+          ...(leg(dramCampaign).trades[0] as CampaignTrade),
+          id: "other-open",
+          price: m("60"),
+          cash: m("-90000"),
+        },
+      ],
+    };
+    c.positions.push(extra);
+    const view = buildCampaignView(c);
+    expect(view.coveredCalls).toMatchObject([
+      { basis: 530000, adjustedBasis: 519000, collateral: 825000000 },
+    ]);
+    expect(view.swings).toMatchObject([
+      { legId: "other-stock-leg", quantity: 1500, entry: 600000 },
+    ]);
+    expect(view.swings).toHaveLength(1);
+  });
+
+  it("does not duplicate assigned coverage; a partial call close releases500 shares at cash55 and wheel53", () => {
+    const c = clone(dramAssignedCampaign);
+    leg(c, 2).coveredLegId = "dram-assigned-stock-leg";
+    expect(buildCampaignView(c).swings).toEqual([]);
+    leg(c, 2).trades.push(closing(5));
+    leg(c, 1).mark = { asOf: d("2026-10-01"), source: "manual", price: m("57") };
+    expect(buildCampaignView(c).swings).toMatchObject([
+      {
+        legId: "dram-assigned-stock-leg",
+        quantity: 500,
+        entry: 550000,
+        assignmentBasis: 530000,
+        unrealized: 10000000,
+      },
+    ]);
+  });
+
+  it("held calls use only local stock and expose500 residual shares at53", () => {
+    const c = clone(dramCampaign);
+    const stock = c.positions[0];
+    const call = c.positions[1];
+    if (!stock || !call) throw new Error("Missing held fixture");
+    call.legs.unshift(...stock.legs);
+    c.positions = [call];
+    leg(c, 0, 1).coveredLegId = null;
+    leg(c, 0, 1).trades.push(closing(5));
+    leg(c).mark = { asOf: d("2026-10-01"), source: "manual", price: m("55") };
+    expect(buildCampaignView(c)).toMatchObject({
+      coveredCalls: [{ shares: 1000, basis: 530000, collateral: 550000000 }],
+      swings: [
+        {
+          positionId: "dram-call",
+          legId: "dram-stock-leg",
+          quantity: 500,
+          entry: 530000,
+          unrealized: 10000000,
+        },
+      ],
+    });
+  });
+
+  it("explicit null or missing referenced backing cannot borrow a matching campaign stock", () => {
+    const c = clone(dramCampaign);
+    leg(c, 1).coveredLegId = null;
+    expect(buildCampaignView(c)).toMatchObject({
+      coveredCalls: [],
+      unsupportedPositionIds: ["dram-call"],
+    });
+    leg(c, 1).coveredLegId = "missing-stock";
+    expect(buildCampaignView(c)).toMatchObject({
+      coveredCalls: [],
+      unsupportedPositionIds: ["dram-call"],
+    });
   });
 });
 

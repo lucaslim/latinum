@@ -12,6 +12,7 @@ export interface CampaignDetailProps {
   campaign: CampaignResponse;
   onSaveMark?: (legId: string, input: ManualMarkRequest) => Promise<void>;
   onSaveLifecycle?: SaveLifecycle;
+  onSellCoveredCall?: (stockLegId: string) => void;
 }
 
 const signedUsd = (amount: Money4) => `${amount >= 0 ? "+" : ""}${usd(amount)}`;
@@ -92,7 +93,12 @@ function MarkForm({
   );
 }
 
-export function CampaignDetail({ campaign, onSaveMark, onSaveLifecycle }: CampaignDetailProps) {
+export function CampaignDetail({
+  campaign,
+  onSaveMark,
+  onSaveLifecycle,
+  onSellCoveredCall,
+}: CampaignDetailProps) {
   const view = buildCampaignView(campaign);
   const [lastLifecycle, setLastLifecycle] = useState<{
     mutation: LifecycleMutation;
@@ -361,15 +367,15 @@ export function CampaignDetail({ campaign, onSaveMark, onSaveLifecycle }: Campai
           )}
           {onSaveMark && <MarkForm swing={swing} onSaveMark={onSaveMark} />}
           {swing.assignmentBasis !== undefined && (
-            <div
-              className="lifecycle-unavailable"
-              data-stock-leg-id={swing.legId}
-              data-share-basis={swing.assignmentBasis}
-            >
-              <button type="button" disabled>
+            <div data-stock-leg-id={swing.legId} data-share-basis={swing.assignmentBasis}>
+              <button
+                type="button"
+                disabled={!onSellCoveredCall || swing.quantity < 100}
+                onClick={() => onSellCoveredCall?.(swing.legId)}
+              >
                 Sell covered call
               </button>
-              <p>Available after trade-form integration</p>
+              {swing.quantity < 100 && <p>At least 100 open assigned shares are required.</p>}
             </div>
           )}
         </section>

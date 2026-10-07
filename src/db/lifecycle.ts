@@ -215,7 +215,7 @@ export function lifecycleRepository(db: Database) {
           .filter((leg) => leg.kind === "stock" && leg.side === "long")
           .reduce((n, leg) => n + BigInt(remaining.get(leg.id) ?? 0), 0n);
         const requiredShares = state.legs
-          .filter((leg) => leg.kind === "call" && leg.side === "short")
+          .filter((leg) => leg.kind === "call" && leg.side === "short" && leg.coveredLegId === null)
           .reduce((n, leg) => n + BigInt(remaining.get(leg.id) ?? 0) * BigInt(leg.multiplier), 0n);
         if (shares < requiredShares)
           throw new LifecycleValidationError(

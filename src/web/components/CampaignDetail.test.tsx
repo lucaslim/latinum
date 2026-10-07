@@ -108,18 +108,59 @@ describe("Campaign transport", () => {
 });
 
 describe("Lifecycle integration", () => {
-  it("renders assignment basis separately from stock entry with a truthful unavailable call offer", () => {
+  it("offers an enabled covered call callback while retaining authoritative assignment basis", () => {
     const campaign: CampaignResponse = {
       ...dramAssignedCampaign,
       positions: dramAssignedCampaign.positions.filter((position) => position.strategy !== "cc"),
     };
-    const output = text(render(campaign));
+    const html = renderToStaticMarkup(
+      <CampaignDetail campaign={campaign} onSellCoveredCall={() => {}} />,
+    );
+    const output = text(html);
     expect(output).toContain("Entry $55.00");
     expect(output).toContain("Assigned share basis $53.00");
     expect(output).toContain("Sell covered call");
-    expect(output).toContain("Available after trade-form integration");
-    expect(render(campaign)).toContain('disabled=""');
+    expect(output).not.toContain("Available after trade-form integration");
+    expect(html).toMatch(/<button type="button">Sell covered call<\/button>/);
     expect(output).toContain("Realized net P/L +$2,990.10");
+  });
+  it("keeps the offer disabled without a callback or a full lot of open assigned shares", () => {
+    const assigned = {
+      ...dramAssignedCampaign,
+      positions: dramAssignedCampaign.positions.filter((position) => position.strategy !== "cc"),
+    };
+    expect(render(assigned)).toMatch(
+      /<button type="button" disabled="">Sell covered call<\/button>/,
+    );
+    const oddLot: CampaignResponse = {
+      ...assigned,
+      positions: assigned.positions.map((position) => ({
+        ...position,
+        legs: position.legs.map((leg) => ({
+          ...leg,
+          trades:
+            leg.kind === "stock"
+              ? [
+                  ...leg.trades,
+                  {
+                    id: "sold-odd-lot",
+                    action: "close",
+                    tradeDate: d("2026-10-01"),
+                    quantity: 1450,
+                    price: m("55"),
+                    cash: m("79750"),
+                    fees: m("0"),
+                  },
+                ]
+              : leg.trades,
+        })),
+      })),
+    };
+    const html = renderToStaticMarkup(
+      <CampaignDetail campaign={oddLot} onSellCoveredCall={() => {}} />,
+    );
+    expect(html).toMatch(/<button type="button" disabled="">Sell covered call<\/button>/);
+    expect(text(html)).toContain("At least 100 open assigned shares are required.");
   });
   it("uses shared recorded allocations across rounding residuals and a reopened pool", () => {
     const campaign: CampaignResponse = {

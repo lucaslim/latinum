@@ -137,7 +137,7 @@ export function toBookPositions(rows: StoredPosition[]): OpenPosition[] {
     const call = requireLeg(row.legs, "call", "short");
     covered.set(
       row.coveredStock.legId,
-      (covered.get(row.coveredStock.legId) ?? 0) + quantity(call) * 100,
+      (covered.get(row.coveredStock.legId) ?? 0) + quantity(call) * call.multiplier,
     );
   }
   return rows.flatMap<OpenPosition>((row) => {
@@ -148,6 +148,28 @@ export function toBookPositions(rows: StoredPosition[]): OpenPosition[] {
       if (shares < 0) throw new Error("Covered calls exceed stock balance");
       return shares === 0 ? [] : [{ id: row.id, campaignId: row.campaignId, ...p, shares }];
     }
-    return [{ id: row.id, campaignId: row.campaignId, ...p }];
+    const entries: OpenPosition[] = [{ id: row.id, campaignId: row.campaignId, ...p }];
+    if (p.strategy === "cc") {
+      const stock = row.legs.find((leg) => leg.kind === "stock" && leg.side === "long");
+      if (stock) {
+        const heldCalls = row.legs
+          .filter((leg) => leg.kind === "call" && leg.side === "short" && leg.coveredLegId === null)
+          .reduce((shares, leg) => shares + quantity(leg) * leg.multiplier, 0);
+        const shares = quantity(stock) - heldCalls - (covered.get(stock.id) ?? 0);
+        if (shares < 0) throw new Error("Covered calls exceed stock balance");
+        if (shares > 0)
+          entries.push({
+            id: row.id,
+            campaignId: row.campaignId,
+            underlying: p.underlying,
+            openedOn: p.openedOn,
+            strategy: "stock",
+            role: "swing",
+            shares,
+            price: openingPrice(stock),
+          });
+      }
+    }
+    return entries;
   });
 }
