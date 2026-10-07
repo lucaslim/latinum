@@ -35,7 +35,7 @@ function PositionsRoute() {
 }
 
 function CampaignRoute({ id }: { id: string }) {
-  const { load, retry, saveMark } = useCampaign(id);
+  const { load, retry, saveMark, saveLifecycle } = useCampaign(id);
   return (
     <>
       <a className="campaign-back" href="#/">
@@ -50,7 +50,13 @@ function CampaignRoute({ id }: { id: string }) {
           </button>
         </div>
       )}
-      {load.status === "ready" && <CampaignDetail campaign={load.data} onSaveMark={saveMark} />}
+      {load.status === "ready" && (
+        <CampaignDetail
+          campaign={load.data}
+          onSaveMark={saveMark}
+          onSaveLifecycle={saveLifecycle}
+        />
+      )}
     </>
   );
 }

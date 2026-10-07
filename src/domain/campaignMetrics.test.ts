@@ -437,6 +437,82 @@ describe("open balances and basis", () => {
   });
 });
 
+describe("lifecycle stock display", () => {
+  it.each(["close", "expire"] as const)(
+    "shows held-cover shares after a seeded CC option %s",
+    (action) => {
+      const c = clone(dramCampaign);
+      const stock = c.positions[0];
+      const call = c.positions[1];
+      if (!stock || !call) throw new Error("Missing DRAM cover fixture");
+      // The seed keeps share cover and the call in the same income position.
+      call.legs.unshift(...stock.legs);
+      c.positions = [call];
+      leg(c, 0, 1).trades.push(closing(15, action));
+      leg(c).mark = { asOf: d("2026-10-01"), source: "manual", price: m("55") };
+      expect(buildCampaignView(c)).toMatchObject({
+        coveredCalls: [],
+        unsupportedPositionIds: [],
+        swings: [
+          {
+            positionId: "dram-call",
+            legId: "dram-stock-leg",
+            quantity: 1500,
+            entry: 530_000,
+            unrealized: 30_000_000,
+          },
+        ],
+      });
+      leg(c).trades.push({
+        ...closing(500),
+        id: "stock-partial",
+        price: m("55"),
+        cash: m("27500"),
+      });
+      expect(buildCampaignView(c).swings).toMatchObject([
+        { quantity: 1000, entry: 530_000, unrealized: 20_000_000 },
+      ]);
+    },
+  );
+
+  it("shows assigned stock basis separately without crediting premium twice in unrealized P/L", () => {
+    const c = clone(dramAssignedCampaign);
+    c.positions = c.positions.slice(0, 2);
+    leg(c, 1).mark = { asOf: d("2026-10-01"), source: "manual", price: m("55") };
+    expect(buildCampaignView(c).swings).toMatchObject([
+      {
+        entry: 550_000,
+        assignmentBasis: 530_000,
+        quantity: 1500,
+        unrealized: 0,
+      },
+    ]);
+    leg(c, 1).trades.push({
+      ...closing(500),
+      id: "stock-partial",
+      price: m("55"),
+      cash: m("27500"),
+    });
+    expect(buildCampaignView(c).swings).toMatchObject([
+      {
+        entry: 550_000,
+        assignmentBasis: 530_000,
+        quantity: 1000,
+        unrealized: 0,
+      },
+    ]);
+    leg(c, 1).mark = { asOf: d("2026-10-01"), source: "manual", price: m("57") };
+    expect(buildCampaignView(c).swings).toMatchObject([
+      { entry: 550_000, assignmentBasis: 530_000, unrealized: 20_000_000 },
+    ]);
+  });
+
+  it("omits assignmentBasis from ordinary stock and long option swings", () => {
+    expect(buildCampaignView(crwdCampaign).swings[0]).not.toHaveProperty("assignmentBasis");
+    expect(buildCampaignView(aaplCampaign).swings[0]).not.toHaveProperty("assignmentBasis");
+  });
+});
+
 describe("hedges and safe unsupported records", () => {
   it("builds a standalone hedge even without CSP puts", () => {
     expect(buildCampaignView(onlyHedge())).toMatchObject({

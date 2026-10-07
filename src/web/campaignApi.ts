@@ -4,6 +4,7 @@ import type {
   ManualMarkRequest,
   ManualMarkResponse,
 } from "../domain/campaign.ts";
+import { saveLifecycle as postLifecycle, type SaveLifecycle } from "./lifecycleApi.ts";
 
 export type CampaignLoad =
   | { status: "loading" }
@@ -80,5 +81,28 @@ export function useCampaign(id: string) {
     }
   }
 
-  return { load, retry: () => setAttempt((value) => value + 1), saveMark };
+  const saveLifecycle: SaveLifecycle = async (positionId, mutation) => {
+    const request = active.current;
+    if (!request || request.id !== id) throw new Error("Campaign is no longer active");
+    const result = await postLifecycle(positionId, mutation, request.abort.signal);
+    const revision = ++request.revision;
+    let data: CampaignResponse;
+    try {
+      data = await fetchCampaign(id, request.abort.signal);
+    } catch (error) {
+      throw new Error(
+        "Lifecycle action was saved, but campaign refresh failed. Reload the campaign before another action.",
+        { cause: error },
+      );
+    }
+    if (
+      !request.abort.signal.aborted &&
+      active.current === request &&
+      request.revision === revision
+    ) {
+      setLoad({ status: "ready", data });
+    }
+    return result;
+  };
+  return { load, retry: () => setAttempt((value) => value + 1), saveMark, saveLifecycle };
 }

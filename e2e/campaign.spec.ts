@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ request }) => {
+  const response = await request.post("/api/test/reset");
+  expect(response.status()).toBe(200);
+});
+
 test.use({ viewport: { width: 390, height: 844 } });
 
 test("NVDL drill-down shows the complete campaign fixture without phone overflow", async ({

@@ -137,8 +137,39 @@ export function campaignRepository(db: Database) {
         .where(eq(s.legs.id, legId))
         .for("update");
       if (!row) return null;
-      if (row.position.role !== "swing" || row.position.closedOn !== null)
-        throw new ManualMarkConflictError();
+      if (row.position.closedOn !== null) throw new ManualMarkConflictError();
+      if (row.position.role !== "swing") {
+        // Held-cover history stays a CC; only its surviving, uncovered stock becomes a swing.
+        if (row.position.strategy !== "cc" || row.leg.kind !== "stock" || row.leg.side !== "long")
+          throw new ManualMarkConflictError();
+        const options = await tx
+          .select()
+          .from(s.legs)
+          .where(
+            and(
+              eq(s.legs.positionId, row.position.id),
+              or(eq(s.legs.kind, "put"), eq(s.legs.kind, "call")),
+            ),
+          );
+        const optionTrades = await tx
+          .select()
+          .from(s.trades)
+          .where(
+            inArray(
+              s.trades.legId,
+              options.map((leg) => leg.id),
+            ),
+          );
+        if (
+          options.some(
+            (leg) =>
+              optionTrades
+                .filter((t) => t.legId === leg.id)
+                .reduce((n, t) => n + (t.action === "open" ? t.quantity : -t.quantity), 0) !== 0,
+          )
+        )
+          throw new ManualMarkConflictError();
+      }
       const trades = await tx.select().from(s.trades).where(eq(s.trades.legId, legId));
       const balance = trades.reduce(
         (n, t) => n + (t.action === "open" ? t.quantity : -t.quantity),

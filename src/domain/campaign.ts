@@ -109,6 +109,8 @@ export interface SwingView {
   kind: CampaignLeg["kind"];
   quantity: number;
   entry: Money4;
+  /** Display-only wheel basis; entry and unrealized still use the cash purchase price. */
+  assignmentBasis?: Money4;
   mark: CampaignMark | null;
   unrealized: Money4 | null;
 }

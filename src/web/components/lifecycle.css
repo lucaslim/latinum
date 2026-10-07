@@ -1,0 +1,90 @@
+.lifecycle-actions {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line2);
+}
+
+.lifecycle-actions h3 {
+  margin: 0 0 0.5rem;
+}
+
+.lifecycle-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lifecycle-actions button {
+  white-space: normal;
+  padding: var(--sp-2);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  cursor: pointer;
+}
+
+.lifecycle-actions :disabled,
+.lifecycle-unavailable button {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lifecycle-actions [role="alert"] {
+  color: var(--debit);
+}
+
+.lifecycle-actions form {
+  margin-top: 0.75rem;
+}
+
+.lifecycle-actions fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+}
+
+.lifecycle-actions label {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.lifecycle-actions input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  font: inherit;
+}
+
+.lifecycle-actions .lifecycle-include {
+  display: flex;
+  align-items: center;
+}
+
+.lifecycle-include input {
+  width: auto;
+}
+
+.lifecycle-actions small {
+  color: var(--muted);
+}
+
+.lifecycle-fill {
+  margin: 0.75rem 0;
+}
+
+.lifecycle-feedback {
+  overflow-wrap: anywhere;
+}
+
+.lifecycle-unavailable {
+  margin-top: 0.75rem;
+}

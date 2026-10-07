@@ -1,16 +1,21 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { CampaignResponse, ManualMarkRequest, SwingView } from "../../domain/campaign.ts";
 import { buildCampaignView, openLegQuantity } from "../../domain/campaignMetrics.ts";
-import { formatMoney4, type Money4 } from "../../domain/money.ts";
+import { allocateRealizedTrades } from "../../domain/lifecyclePnl.ts";
+import { formatMoney4, type Money4, sumMoney4 } from "../../domain/money.ts";
 import { percent, usd } from "../format.ts";
+import type { LifecycleMutation, LifecycleResult, SaveLifecycle } from "../lifecycleApi.ts";
+import { LifecycleActions } from "./LifecycleActions.tsx";
 import "./campaign.css";
 
 export interface CampaignDetailProps {
   campaign: CampaignResponse;
   onSaveMark?: (legId: string, input: ManualMarkRequest) => Promise<void>;
+  onSaveLifecycle?: SaveLifecycle;
 }
 
 const signedUsd = (amount: Money4) => `${amount >= 0 ? "+" : ""}${usd(amount)}`;
+const signedCents = (amount: Money4) => `${amount >= 0 ? "+" : ""}${usd(amount, 2)}`;
 const count = (quantity: number) => quantity.toLocaleString("en-US");
 
 function Metric({ label, children }: { label: string; children: ReactNode }) {
@@ -87,8 +92,18 @@ function MarkForm({
   );
 }
 
-export function CampaignDetail({ campaign, onSaveMark }: CampaignDetailProps) {
+export function CampaignDetail({ campaign, onSaveMark, onSaveLifecycle }: CampaignDetailProps) {
   const view = buildCampaignView(campaign);
+  const [lastLifecycle, setLastLifecycle] = useState<{
+    mutation: LifecycleMutation;
+    result: LifecycleResult;
+  } | null>(null);
+  const realized = campaign.positions.flatMap((position) =>
+    position.legs.flatMap((leg) =>
+      allocateRealizedTrades(leg.trades.map((trade) => ({ ...trade, date: trade.tradeDate }))),
+    ),
+  );
+  const realizedByTrade = new Map(realized.map((allocation) => [allocation.tradeId, allocation]));
   const spreadPositionIds = new Set(
     campaign.positions
       .filter(
@@ -123,6 +138,40 @@ export function CampaignDetail({ campaign, onSaveMark }: CampaignDetailProps) {
         {campaign.closedOn && ` · Closed ${campaign.closedOn}`}
       </p>
       {campaign.notes && <p>{campaign.notes}</p>}
+      {lastLifecycle && (
+        <div className="lifecycle-feedback campaign-panel" role="status">
+          {lastLifecycle.mutation.action === "link-hedge" ? (
+            <>
+              <p>
+                {lastLifecycle.result.campaignId === campaign.id
+                  ? "Hedge already belongs to this campaign."
+                  : "Hedge moved; source campaign preserved."}
+              </p>
+              <a href={`#/campaigns/${lastLifecycle.result.campaignId}`}>Open target campaign</a>
+            </>
+          ) : (
+            "realized" in lastLifecycle.result && (
+              <>
+                <p>
+                  Lifecycle saved; campaign refreshed. Realized net P/L{" "}
+                  {signedCents(
+                    sumMoney4(lastLifecycle.result.realized.map((allocation) => allocation.pnl)),
+                  )}
+                </p>
+                {lastLifecycle.result.assignment && (
+                  <p
+                    data-stock-leg-id={lastLifecycle.result.assignment.stockLegId}
+                    data-share-basis={lastLifecycle.result.assignment.basis}
+                  >
+                    Assignment: {count(lastLifecycle.result.assignment.shares)} shares · Wheel basis{" "}
+                    {usd(lastLifecycle.result.assignment.basis, 2)}
+                  </p>
+                )}
+              </>
+            )
+          )}
+        </div>
+      )}
 
       <section className="campaign-panel" aria-label="Recorded legs">
         <h2>Recorded legs</h2>
@@ -142,6 +191,16 @@ export function CampaignDetail({ campaign, onSaveMark }: CampaignDetailProps) {
                   </li>
                 ))}
               </ul>
+              {onSaveLifecycle && (
+                <LifecycleActions
+                  position={position}
+                  onSave={async (positionId, mutation) => {
+                    const result = await onSaveLifecycle(positionId, mutation);
+                    setLastLifecycle({ mutation, result });
+                    return result;
+                  }}
+                />
+              )}
               {view.unsupportedPositionIds.includes(position.id) && (
                 <p className="tone-muted">
                   Scenario cards are not available for this recorded strategy.
@@ -285,6 +344,9 @@ export function CampaignDetail({ campaign, onSaveMark }: CampaignDetailProps) {
               {count(swing.quantity)} {swing.kind === "stock" ? "shares" : "contracts"}
             </Metric>
             <Metric label="Entry">{usd(swing.entry, 2)}</Metric>
+            {swing.assignmentBasis !== undefined && (
+              <Metric label="Assigned share basis">{usd(swing.assignmentBasis, 2)}</Metric>
+            )}
             <Metric label="Mark">
               {swing.mark ? usd(swing.mark.price, 2) : "No mark recorded"}
             </Metric>
@@ -298,34 +360,57 @@ export function CampaignDetail({ campaign, onSaveMark }: CampaignDetailProps) {
             </p>
           )}
           {onSaveMark && <MarkForm swing={swing} onSaveMark={onSaveMark} />}
+          {swing.assignmentBasis !== undefined && (
+            <div
+              className="lifecycle-unavailable"
+              data-stock-leg-id={swing.legId}
+              data-share-basis={swing.assignmentBasis}
+            >
+              <button type="button" disabled>
+                Sell covered call
+              </button>
+              <p>Available after trade-form integration</p>
+            </div>
+          )}
         </section>
       ))}
 
       <section className="campaign-panel" aria-label="Recorded timeline">
         <h2>Recorded timeline</h2>
+        {realized.length > 0 && (
+          <dl className="campaign-metrics">
+            <Metric label="Total realized net P/L">
+              {signedCents(sumMoney4(realized.map((allocation) => allocation.pnl)))}
+            </Metric>
+          </dl>
+        )}
         {view.timeline.length === 0 && <p>No trades recorded.</p>}
         <ol className="campaign-timeline">
-          {view.timeline.map((event) => (
-            <li className="campaign-event" key={event.trade.id} data-action={event.trade.action}>
-              <time dateTime={event.trade.tradeDate}>{event.trade.tradeDate}</time>
-              <div>
-                <strong>
-                  {event.underlying} {event.side} {event.kind} · {event.trade.action}
-                </strong>
-                <p>
-                  {count(event.trade.quantity)} {event.kind === "stock" ? "shares" : "contracts"} at{" "}
-                  {usd(event.trade.price, 2)} · Cash {signedUsd(event.trade.cash)} · Fees{" "}
-                  {usd(event.trade.fees, 2)}
-                </p>
-                {event.assignment && (
+          {view.timeline.map((event) => {
+            const allocation = realizedByTrade.get(event.trade.id);
+            return (
+              <li className="campaign-event" key={event.trade.id} data-action={event.trade.action}>
+                <time dateTime={event.trade.tradeDate}>{event.trade.tradeDate}</time>
+                <div>
+                  <strong>
+                    {event.underlying} {event.side} {event.kind} · {event.trade.action}
+                  </strong>
                   <p>
-                    Assignment linked: {count(event.assignment.shares)} shares · premium{" "}
-                    {usd(event.assignment.premiumPerShare, 2)}/sh
+                    {count(event.trade.quantity)} {event.kind === "stock" ? "shares" : "contracts"}{" "}
+                    at {usd(event.trade.price, 2)} · Cash {signedUsd(event.trade.cash)} · Fees{" "}
+                    {usd(event.trade.fees, 2)}
                   </p>
-                )}
-              </div>
-            </li>
-          ))}
+                  {allocation && <p>Realized net P/L {signedCents(allocation.pnl)}</p>}
+                  {event.assignment && (
+                    <p>
+                      Assignment linked: {count(event.assignment.shares)} shares · premium{" "}
+                      {usd(event.assignment.premiumPerShare, 2)}/sh
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ol>
       </section>
     </div>

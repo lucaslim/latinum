@@ -1,5 +1,7 @@
 export * from "./calendar.ts";
 export * from "./dates.ts";
+export * from "./lifecyclePnl.ts";
+export type { QuantityTrade, RealizedAllocation } from "./lifecycleTypes.ts";
 export * from "./money.ts";
 export * from "./pnl.ts";
 export * from "./positions.ts";

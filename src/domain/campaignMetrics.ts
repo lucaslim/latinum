@@ -179,7 +179,14 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
     if (position.strategy === "cc" && position.role === "income") {
       const options = open.filter(({ leg }) => leg.kind !== "stock");
       const [call] = options;
-      if (options.length === 0) continue;
+      if (options.length === 0) {
+        for (const shares of open.filter(
+          ({ leg }) => leg.kind === "stock" && leg.side === "long",
+        )) {
+          view.swings.push(swingView(position, shares, campaign));
+        }
+        continue;
+      }
       const backing = stock.filter(({ leg }) => leg.underlying === position.underlying);
       const stockShares = backing.reduce((n, s) => n + s.quantity * s.leg.multiplier, 0);
       if (
@@ -296,7 +303,7 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
         continue;
       }
       if (position.role === "swing") {
-        view.swings.push(swingView(position, first));
+        view.swings.push(swingView(position, first, campaign));
         continue;
       }
     }
@@ -308,7 +315,7 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
       first.leg.kind === "stock" &&
       first.leg.side === "long"
     ) {
-      view.swings.push(swingView(position, first));
+      view.swings.push(swingView(position, first, campaign));
       continue;
     }
     view.unsupportedPositionIds.push(position.id);
@@ -318,7 +325,11 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
   return view;
 }
 
-function swingView(position: CampaignPosition, open: OpenLeg): CampaignView["swings"][number] {
+function swingView(
+  position: CampaignPosition,
+  open: OpenLeg,
+  campaign: CampaignResponse,
+): CampaignView["swings"][number] {
   let unrealized: Money4 | null = null;
   if (open.leg.mark !== null) {
     const openings = open.leg.trades.filter((trade) => trade.action === "open");
@@ -338,6 +349,10 @@ function swingView(position: CampaignPosition, open: OpenLeg): CampaignView["swi
     kind: open.leg.kind,
     quantity: open.quantity,
     entry: open.entry,
+    ...(open.leg.kind === "stock" &&
+    open.leg.trades.some((t) => campaign.assignments.some((a) => a.stockTradeId === t.id))
+      ? { assignmentBasis: openingEntry(open.leg, campaign) }
+      : {}),
     mark: open.leg.mark,
     unrealized,
   };

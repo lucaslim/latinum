@@ -5,7 +5,7 @@ const apiPort = Number(process.env.E2E_API_PORT ?? 8788);
 
 export default defineConfig({
   testDir: "e2e",
-  // Specs mutate the same local book; serialize and reset the trade-form spec.
+  // Browser writes share one local book; each mutating spec resets before using it.
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

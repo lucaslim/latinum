@@ -59,14 +59,26 @@ export function toBookPosition(p: StoredPosition): Position {
         strategy: "csp",
         role: "income",
       };
-    case "cc":
+    case "cc": {
+      const call = requireLeg(p.legs, "call", "short");
+      const stock = p.legs.find((leg) => leg.kind === "stock" && leg.side === "long");
+      if (quantity(call) === 0 && stock && quantity(stock) > 0) {
+        return {
+          ...base,
+          strategy: "stock",
+          role: "swing",
+          shares: quantity(stock),
+          price: openingPrice(stock),
+        };
+      }
       return {
         ...base,
-        ...option(requireLeg(p.legs, "call", "short")),
+        ...option(call),
         strategy: "cc",
         role: "income",
         basis: p.coveredStock?.basis ?? openingPrice(requireLeg(p.legs, "stock", "long")),
       };
+    }
     case "put_credit_spread":
     case "call_credit_spread": {
       const kind = p.strategy === "put_credit_spread" ? "put" : "call";
