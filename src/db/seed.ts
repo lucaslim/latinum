@@ -22,11 +22,19 @@ export async function seedBook<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>
       await tx.delete(s.positions).where(eq(s.positions.campaignId, campaign.id));
       await tx.delete(s.campaigns).where(eq(s.campaigns.id, campaign.id));
     }
+    const nvdlCampaignId = randomUUID();
     for (const [index, p] of prototypeBook.entries()) {
-      const campaignId = randomUUID();
+      const linkedNvdl = p.underlying === "NVDL" || p.underlying === "NVDA";
+      const campaignId = linkedNvdl ? nvdlCampaignId : randomUUID();
       await tx
         .insert(s.campaigns)
-        .values({ id: campaignId, accountId, title: p.underlying, openedOn: p.openedOn });
+        .values({
+          id: campaignId,
+          accountId,
+          title: linkedNvdl ? "NVDL" : p.underlying,
+          openedOn: p.openedOn,
+        })
+        .onConflictDoNothing({ target: s.campaigns.id });
       function leg(
         kind: NewLeg["kind"],
         side: NewLeg["side"],

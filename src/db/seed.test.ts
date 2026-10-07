@@ -16,7 +16,18 @@ test("rerunnable open-book seed reconstructs basis, net debit and domain totals"
     const rows = await repository(db).readOpenPositions(accountId);
     const loaded = rows.map(toBookPosition);
     expect(rows).toHaveLength(prototypeBook.length);
+    const nvdlCampaign = rows.filter(
+      (row) => row.underlying === "NVDL" || row.underlying === "NVDA",
+    );
+    expect(new Set(nvdlCampaign.map((row) => row.campaignId)).size).toBe(1);
+    expect(nvdlCampaign.map((row) => row.underlying).sort()).toEqual(["NVDA", "NVDL", "NVDL"]);
     expect(bookTotals(loaded)).toEqual(bookTotals(prototypeBook));
+    expect(bookTotals(loaded)).toMatchObject({
+      contracts: 77,
+      premium: 144_500_000,
+      incomeCollateral: 4_345_000_000,
+      capitalDeployed: 4_583_980_000,
+    });
     expect(
       loaded.sort((a, b) => a.underlying.localeCompare(b.underlying) || a.price - b.price),
     ).toEqual(

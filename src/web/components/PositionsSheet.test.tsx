@@ -11,7 +11,9 @@ const render = (book: Position[], initialFilter?: "income" | "hedges" | "swings"
   renderToStaticMarkup(
     <PositionsSheet
       asOf={asOf}
-      positions={book.map((p, i): OpenPosition => ({ ...p, id: `p${i}` }))}
+      positions={book.map(
+        (p, i): OpenPosition => ({ ...p, id: `p${i}`, campaignId: `campaign-${i}` }),
+      )}
       {...(initialFilter ? { initialFilter } : {})}
     />,
   );
@@ -87,6 +89,11 @@ describe("Sheet rows", () => {
     expect(html.match(/class="row cc"/g)).toHaveLength(2);
     expect(html.match(/class="row hedge"/g)).toHaveLength(2);
     expect(html.match(/class="row swing"/g)).toHaveLength(2);
+  });
+
+  it("links ticker names to the campaign in both desktop rows and phone cards", () => {
+    expect(html.match(/href="#\/campaigns\/campaign-0"/g)).toHaveLength(2);
+    expect(html.match(/<a[^>]*href="#\/campaigns\/campaign-0"[^>]*>DRAM<\/a>/g)).toHaveLength(2);
   });
 
   it("renders two-line cards for the narrow layout", () => {

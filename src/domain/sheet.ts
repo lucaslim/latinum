@@ -2,7 +2,7 @@ import type { IsoDate } from "./dates.ts";
 import type { Position } from "./positions.ts";
 
 /** One open Sheet row: the position's domain shape plus its stored id. */
-export type OpenPosition = Position & { id: string };
+export type OpenPosition = Position & { id: string; campaignId: string };
 
 /** `GET /api/positions?status=open`. `asOf` is today in New York, so DTE needs no client clock. */
 export interface OpenPositionsResponse {
