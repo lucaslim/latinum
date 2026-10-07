@@ -10,6 +10,12 @@ export class ManualMarkConflictError extends Error {
   }
 }
 
+export class ManualMarkDateError extends Error {
+  constructor() {
+    super("Leg was not open on mark date");
+  }
+}
+
 export function campaignRepository(db: Database) {
   async function readCampaign(id: string, asOf: IsoDate): Promise<CampaignResponse | null> {
     return db.transaction(
@@ -139,6 +145,10 @@ export function campaignRepository(db: Database) {
         0,
       );
       if (balance <= 0) throw new ManualMarkConflictError();
+      const historicalBalance = trades
+        .filter((t) => t.tradeDate <= mark.asOf)
+        .reduce((n, t) => n + (t.action === "open" ? t.quantity : -t.quantity), 0);
+      if (historicalBalance <= 0) throw new ManualMarkDateError();
       await tx
         .insert(s.marks)
         .values({ legId, asOf: mark.asOf, price: mark.price, source: "manual" })

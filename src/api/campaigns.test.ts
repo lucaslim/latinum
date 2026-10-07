@@ -389,6 +389,73 @@ test("marks reject closed and non-swing legs as 409 without writing", async () =
   }
 });
 
+test.each([
+  { asOf: "2026-09-17", status: 400 },
+  { asOf: "2026-09-18", status: 200 },
+  { asOf: "2026-09-19", status: 200 },
+  { asOf: "2026-09-20", status: 400 },
+  { asOf: "2026-09-21", status: 400 },
+  { asOf: "2026-09-30", status: 200 },
+])("manual mark date eligibility: $asOf returns $status", async ({ asOf, status }) => {
+  const { db } = database;
+  const legId = randomUUID();
+  const positionId = await repository(db).createPosition({
+    campaignId: nvdlId,
+    underlying: "AAPL",
+    strategy: "long_call",
+    role: "swing",
+    openedOn: "2026-09-01",
+    legs: [
+      {
+        id: legId,
+        kind: "call",
+        side: "long",
+        underlying: "AAPL",
+        strike: m("250"),
+        expiry: "2026-11-20",
+        trades: [
+          {
+            action: "open",
+            tradeDate: "2026-09-18",
+            quantity: 1,
+            price: m("7.80"),
+            cash: m("-780"),
+          },
+        ],
+      },
+    ],
+  });
+  await repository(db).appendTrades(positionId, [
+    {
+      legId,
+      action: "close",
+      tradeDate: "2026-09-20",
+      quantity: 1,
+      price: m("5.10"),
+      cash: m("510"),
+    },
+    {
+      legId,
+      action: "open",
+      tradeDate: "2026-09-30",
+      quantity: 1,
+      price: m("7.80"),
+      cash: m("-780"),
+    },
+  ]);
+  const response = await mark(legId, { asOf, price: "5.10" });
+  expect(response.status).toBe(status);
+  if (status === 400) {
+    expect(await response.json()).toEqual({ error: "Leg was not open on mark date" });
+    expect(await db.select().from(s.marks).where(eq(s.marks.legId, legId))).toEqual([]);
+  } else {
+    expect(await response.json()).toEqual({ legId, asOf, price: 51000, source: "manual" });
+    expect(await db.select().from(s.marks).where(eq(s.marks.legId, legId))).toEqual([
+      { legId, asOf, price: 51000, source: "manual" },
+    ]);
+  }
+});
+
 test("database failures propagate to the application error boundary", async () => {
   const broken = createApp({
     withDb: async () => {

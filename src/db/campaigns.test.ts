@@ -335,6 +335,81 @@ test("a fully closed swing position rejects marks transactionally", async () => 
   expect(await db.select().from(s.marks).where(eq(s.marks.legId, legId))).toEqual([]);
 });
 
+test("manual marks require the leg's opening date, not the position's opening date", async () => {
+  const { db } = database;
+  await position(db, campaignId, 80, "swing");
+  const legId = id(84);
+  await db.insert(s.legs).values({
+    id: legId,
+    positionId: id(80),
+    kind: "call",
+    side: "long",
+    underlying: "AAPL",
+    strike: m("250"),
+    expiry: "2026-10-16",
+  });
+  await repository(db).appendTrades(id(80), [
+    {
+      legId,
+      action: "open",
+      tradeDate: "2026-09-18",
+      quantity: 1,
+      price: m("7.80"),
+      cash: m("-780"),
+    },
+  ]);
+  const repo = campaignRepository(db);
+  await expect(
+    repo.saveManualMark(legId, { asOf: d("2026-09-17"), price: m("5.10"), source: "manual" }),
+  ).rejects.toThrow("Leg was not open on mark date");
+  expect(await db.select().from(s.marks).where(eq(s.marks.legId, legId))).toEqual([]);
+  for (const date of ["2026-09-18", "2026-09-30"]) {
+    expect(
+      await repo.saveManualMark(legId, { asOf: d(date), price: m("5.10"), source: "manual" }),
+    ).toEqual({ legId, asOf: date, price: 51000, source: "manual" });
+  }
+});
+
+test("closed-gap marks reject without replacing existing marks even after the leg reopens", async () => {
+  const { db } = database;
+  const legId = await position(db, campaignId, 90, "swing");
+  await repository(db).appendTrades(id(90), [
+    {
+      legId,
+      action: "close",
+      tradeDate: "2026-09-18",
+      quantity: 1,
+      price: m("5.10"),
+      cash: m("510"),
+    },
+    {
+      legId,
+      action: "open",
+      tradeDate: "2026-09-30",
+      quantity: 1,
+      price: m("7.80"),
+      cash: m("-780"),
+    },
+  ]);
+  await db.insert(s.marks).values([
+    { legId, asOf: "2026-09-20", source: "manual", price: m("5.10") },
+    { legId, asOf: "2026-09-20", source: "feed", price: m("7.80") },
+  ]);
+  await expect(
+    campaignRepository(db).saveManualMark(legId, {
+      asOf: d("2026-09-20"),
+      price: m("5.20"),
+      source: "manual",
+    }),
+  ).rejects.toThrow("Leg was not open on mark date");
+  expect(
+    await db.select().from(s.marks).where(eq(s.marks.legId, legId)).orderBy(s.marks.source),
+  ).toEqual([
+    { legId, asOf: "2026-09-20", source: "feed", price: 78000 },
+    { legId, asOf: "2026-09-20", source: "manual", price: 51000 },
+  ]);
+});
+
 test("multiple accounts fail loudly instead of silently selecting or merging", async () => {
   await database.db.insert(s.accounts).values({ label: "second", broker: "manual" });
   await expect(campaignRepository(database.db).readCampaign(campaignId, asOf)).rejects.toThrow(

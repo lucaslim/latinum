@@ -1,5 +1,9 @@
 import type { Handler } from "hono";
-import { campaignRepository, ManualMarkConflictError } from "../db/campaigns.ts";
+import {
+  campaignRepository,
+  ManualMarkConflictError,
+  ManualMarkDateError,
+} from "../db/campaigns.ts";
 import type { CampaignMark } from "../domain/campaign.ts";
 import { parseIsoDate, todayNY } from "../domain/dates.ts";
 import { parseMoney4 } from "../domain/money.ts";
@@ -63,6 +67,7 @@ export function manualMarkRoute({ withDb, now }: PositionsDeps): Handler {
       const response = await withDb((db) => campaignRepository(db).saveManualMark(id, mark));
       return response ? c.json(response) : c.json({ error: "Leg not found" }, 404);
     } catch (error) {
+      if (error instanceof ManualMarkDateError) return c.json({ error: error.message }, 400);
       if (!(error instanceof ManualMarkConflictError)) throw error;
       return c.json({ error: error.message }, 409);
     }

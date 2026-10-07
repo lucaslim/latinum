@@ -79,7 +79,8 @@ synthetic DRAM seed instead labels its $53.00 as opening share basis.
 
 Swing legs accept `PUT /api/legs/:id/mark` with `{ "price": "5.10" }` and an optional
 `asOf` calendar date (default: today in New York). Prices must be positive decimal USD with
-at most four decimals; future dates are rejected. Repeating a manual mark for the same leg
+at most four decimals; future dates and dates when the leg had no open balance are rejected
+with 400. The leg must also still be an open swing leg. Repeating a manual mark for the same leg
 and date replaces it without removing feed marks. On a date shared by both sources, manual
 wins. Both endpoints are private and uncached. This adds no assignment or hedge-link action.
 
