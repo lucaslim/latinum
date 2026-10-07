@@ -8,8 +8,9 @@ import { createTrade, editTrade, loadManualTrades, loadTradeFormOptions } from "
 import { previewEditedTrade, TradeEditor } from "./TradeEditor.tsx";
 import { DerivedTradeMetrics } from "./TradeForm.tsx";
 
-const position: OpenPosition = {
+const position: Extract<OpenPosition, { strategy: "csp" }> = {
   id: "position",
+  campaignId: "campaign",
   strategy: "csp",
   role: "income",
   underlying: "DRAM",
@@ -64,6 +65,7 @@ describe("manual edit variants", () => {
   it("clears the preview instead of throwing when an edited stock fill exceeds Money4 precision", () => {
     const stock: OpenPosition = {
       id: "stock",
+      campaignId: "campaign",
       strategy: "stock",
       role: "swing",
       underlying: "CRWD",
@@ -183,6 +185,7 @@ describe("manual edit variants", () => {
   it("shows stock capital and leaves gross metrics unchanged for fees-only edits", () => {
     const stock: OpenPosition = {
       id: "stock",
+      campaignId: "campaign",
       strategy: "stock",
       role: "swing",
       underlying: "CRWD",
