@@ -106,7 +106,6 @@ function CardFooter({ totals }: { totals: BookTotals }) {
   );
 }
 
-/** Render filtered book rows and totals while counting each persisted position only once. */
 export function PositionsSheet({
   positions,
   asOf,

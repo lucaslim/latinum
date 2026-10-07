@@ -31,19 +31,16 @@ const MAX_PRICE = 999999999999;
 const MAX_CASH = 99999999999999;
 const MAX_QUANTITY = 2147483647;
 
-/** Require a positive, safe Postgres integer quantity or throw LifecycleValidationError. */
 function quantity(value: number) {
   if (!Number.isSafeInteger(value) || value <= 0 || value > MAX_QUANTITY)
     throw new LifecycleValidationError("Quantity must be a positive Postgres integer");
   return value;
 }
-/** Require integer Money4 units within the supplied sign and storage bounds. */
 function money(value: Money4, maximum: number, minimum: number, name: string) {
   if (!Number.isSafeInteger(value) || value > maximum || value < minimum)
     throw new LifecycleValidationError(`${name} exceeds numeric storage precision or sign bounds`);
   return value;
 }
-/** Calculate signed fill cash with exact integer multiplication and validate storage bounds. */
 function cashFor(price: Money4, qty: number, multiplier: number, sign: 1 | -1) {
   quantity(qty);
   quantity(multiplier);
@@ -55,7 +52,6 @@ function cashFor(price: Money4, qty: number, multiplier: number, sign: 1 | -1) {
     throw new LifecycleValidationError("Cash exceeds numeric storage precision");
   return Number(cash) as Money4;
 }
-/** Adapt ordered stored trades to the domain allocator for one leg. */
 function allocations(trades: readonly (StoredTrade | Event)[]): RealizedAllocation[] {
   return allocateRealizedTrades(
     trades.map((t) => ({
@@ -69,11 +65,6 @@ function allocations(trades: readonly (StoredTrade | Event)[]): RealizedAllocati
   );
 }
 
-/**
- * Lock a position within the caller's transaction and load its legs, ordered trades and balances.
- * Return null when the account or position is absent; reject inconsistent account or quantity state.
- * Choose a timestamp after existing trades so same-day lifecycle events append deterministically.
- */
 async function snapshot(db: Database, id: string) {
   const accounts = await db.select({ id: s.accounts.id }).from(s.accounts);
   if (accounts.length > 1) throw new LifecycleConflictError("Lifecycle requires a single account");
@@ -122,19 +113,16 @@ async function snapshot(db: Database, id: string) {
 }
 type Snapshot = NonNullable<Awaited<ReturnType<typeof snapshot>>>;
 
-/** Reject a lifecycle date earlier than the position opening or any recorded trade. */
 function checkDate(state: Snapshot, date: IsoDate) {
   if (date < state.position.openedOn || state.trades.some((t) => date < t.tradeDate))
     throw new LifecycleValidationError(
       "Trade date cannot precede opening or the latest position trade",
     );
 }
-/** Reject a closed position or one with no positive remaining leg quantity. */
 function requireOpen(state: Snapshot) {
   if (state.position.closedOn !== null || ![...state.balances.values()].some((n) => n > 0))
     throw new LifecycleConflictError("Position has no open quantity");
 }
-/** Build a manual lifecycle trade using the snapshot timestamp and validated quantity and money. */
 function event(
   state: Snapshot,
   legId: string,
@@ -158,7 +146,6 @@ function event(
     createdAt: state.createdAt,
   };
 }
-/** Allocate each leg with the proposed events and return only the new realized bookings. */
 function closingAllocations(state: Snapshot, events: Event[]) {
   const ids = new Set(events.map((t) => t.id));
   return state.legs.flatMap((leg) =>
@@ -168,7 +155,6 @@ function closingAllocations(state: Snapshot, events: Event[]) {
     ]).filter((a) => ids.has(a.tradeId)),
   );
 }
-/** Append validated events within the caller transaction and return closure and realized P/L details. */
 async function append(db: Database, state: Snapshot, events: Event[]): Promise<LifecycleResponse> {
   const realized = closingAllocations(state, events);
   const closedOn = await repository(db).appendTrades(state.position.id, events);
@@ -181,13 +167,7 @@ async function append(db: Database, state: Snapshot, events: Event[]): Promise<L
   };
 }
 
-/**
- * Bind atomic close, expiration, assignment and hedge-link operations to a database.
- * Operations return null for missing records and throw validation or conflict errors
- * when the requested transition is incompatible with the recorded position.
- */
 export function lifecycleRepository(db: Database) {
-  /** Atomically close requested leg quantities while preserving spread balance and stock coverage. */
   async function closePosition(id: string, input: CloseInput): Promise<LifecycleResponse | null> {
     return db.transaction(async (tx) => {
       const state = await snapshot(tx, id);
@@ -246,7 +226,6 @@ export function lifecycleRepository(db: Database) {
     });
   }
 
-  /** Atomically expire all remaining options at zero cash and fees on or after expiry, retaining stock. */
   async function expirePosition(id: string, input: ExpireInput): Promise<LifecycleResponse | null> {
     return db.transaction(async (tx) => {
       const state = await snapshot(tx, id);
@@ -276,11 +255,6 @@ export function lifecycleRepository(db: Database) {
     });
   }
 
-  /**
-   * Atomically assign all remaining contracts of a single unadjusted short CSP put.
-   * Book stock at strike cash cost and link it to the option assignment; return the
-   * premium-adjusted basis separately for display. Roll back all writes on failure.
-   */
   async function assignPosition(id: string, input: AssignInput): Promise<LifecycleResponse | null> {
     return db.transaction(async (tx) => {
       const state = await snapshot(tx, id);
@@ -377,7 +351,6 @@ export function lifecycleRepository(db: Database) {
     });
   }
 
-  /** Move an open, non-roll-linked hedge to a same-account campaign; linking its current campaign is a no-op. */
   async function linkHedge(id: string, input: LinkHedgeRequest): Promise<LinkHedgeResponse | null> {
     return db.transaction(async (tx) => {
       const state = await snapshot(tx, id);

@@ -31,7 +31,6 @@ afterAll(async () => {
   await database.client.close();
 });
 
-/** Persist a short-put fixture and return its campaign, position and leg identifiers. */
 async function put(
   underlying = "MUU",
   quantity = 10,
@@ -75,7 +74,6 @@ async function put(
   });
   return { positionId, campaignId: campaign.id, legId };
 }
-/** Submit a JSON lifecycle request through the in-process production API. */
 const post = (id: string, action: string, body: unknown) =>
   app.request(`/api/positions/${id}/${action}`, {
     method: "POST",
@@ -148,7 +146,6 @@ test("DRAM assignment books 2990.10, opens 1500 shares at 55 and records basis53
   });
 });
 
-/** Assign DRAM shares and sell a call backed by them through the production API. */
 async function assignedCall() {
   const fixture = await put("DRAM", 15, "2", "3000", "-9.90", "55");
   const assigned = await post(fixture.positionId, "assign", { legId: fixture.legId });
@@ -445,7 +442,6 @@ test("held-cover shares accept marks when partially or fully released, but not w
       },
     ],
   });
-  /** Request a manual mark for the held stock, optionally at a historical date. */
   const mark = (asOf?: string) =>
     app.request(`/api/legs/${stockLegId}/mark`, {
       method: "PUT",

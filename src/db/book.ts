@@ -37,7 +37,7 @@ function option(leg: StoredLeg) {
   };
 }
 
-/** Convert stored legs to a Sheet position at opening prices before fees, exposing surviving CC stock as a swing. */
+// The Sheet values remaining quantity at opening prices, before fees.
 export function toBookPosition(p: StoredPosition): Position {
   const base = { underlying: p.underlying, openedOn: parseIsoDate(p.openedOn) };
   switch (p.strategy) {

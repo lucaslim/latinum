@@ -1,7 +1,6 @@
 import type { QuantityTrade, RealizedAllocation } from "./lifecycleTypes.ts";
 import { type Money4, prorateMoney4 } from "./money.ts";
 
-/** Return a safe integer or throw RangeError before lifecycle arithmetic can lose precision. */
 function safeInteger(value: number): number {
   if (!Number.isSafeInteger(value)) throw new RangeError("Unsafe lifecycle integer");
   return value;

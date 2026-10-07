@@ -4,7 +4,6 @@ import { allocateRealizedTrades } from "./lifecyclePnl.ts";
 import type { QuantityTrade } from "./lifecycleTypes.ts";
 import { type Money4, prorateMoney4 } from "./money.ts";
 
-/** Build a quantity-trade fixture from literal Money4 units without applying production calculations. */
 function trade(
   id: string,
   action: QuantityTrade["action"],

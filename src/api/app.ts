@@ -13,7 +13,6 @@ import {
   tradeFormOptionsRoute,
 } from "./trades.ts";
 
-/** Build the public API with injected database access and clock dependencies. */
 export function createApp(deps: PositionsDeps) {
   const app = new Hono().basePath("/api");
 

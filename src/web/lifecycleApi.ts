@@ -21,18 +21,12 @@ export type SaveLifecycle = (
 export class LifecycleHttpError extends Error {
   readonly status: number;
 
-  /** Preserve an HTTP failure status, detail and optional cause for recovery decisions. */
   constructor(status: number, detail: string, options?: ErrorOptions) {
     super(`${detail} (HTTP ${status})`, options);
     this.status = status;
   }
 }
 
-/**
- * POST one lifecycle mutation without retries and return its typed response.
- * HTTP failures retain the status and server detail when available; malformed JSON
- * error bodies use the fallback message and preserve the parsing error as the cause.
- */
 export async function saveLifecycle(
   positionId: string,
   mutation: LifecycleMutation,
