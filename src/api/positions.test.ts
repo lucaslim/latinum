@@ -35,6 +35,10 @@ describe("GET /api/positions?status=open", () => {
       expect(formatMoney4(totals.capitalDeployed, 0)).toBe("458398");
       expect(totals).toEqual(bookTotals(prototypeBook));
       expect(new Set(body.positions.map((p) => p.id)).size).toBe(12);
+      const nvdl = body.positions.filter((p) => p.underlying === "NVDL" || p.underlying === "NVDA");
+      expect(new Set(nvdl.map((p) => p.campaignId)).size).toBe(1);
+      expect(nvdl[0]?.campaignId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(new Set(body.positions.map((p) => p.campaignId)).size).toBe(10);
     } finally {
       await client.close();
     }

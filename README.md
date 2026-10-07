@@ -64,8 +64,24 @@ A failed write returns 500 so a broken connection shows up in the cron log.
 `pnpm db:seed [local-path]` migrates and seeds local PGlite (default `.pglite/`). It never
 connects to Neon and replaces only the prototype seed account's open book on reruns.
 The synthetic opening fills preserve the fixture's covered-share basis and spread net
-price; they do not represent historical assignments or rolls. The open-book DTO bridge
-supports only the prototype's strategies; repository reads retain the full stored rows.
+price; they do not represent historical assignments or rolls. The two NVDL puts and the
+NVDA hedge share one campaign; the position count and Sheet totals are unchanged. The
+open-book DTO bridge supports only the prototype's strategies; repository reads retain the
+full stored rows.
+
+## Campaign drill-down
+
+Sheet ticker links open `#/campaigns/<id>`. `GET /api/campaigns/:id` returns recorded legs,
+trades, assignments and the latest mark on or before today in New York. Scenario cards use
+the domain math; historical trades stay in the timeline, not in open-position scenarios.
+Covered calls show assignment-adjusted basis only when an assignment is recorded; the
+synthetic DRAM seed instead labels its $53.00 as opening share basis.
+
+Swing legs accept `PUT /api/legs/:id/mark` with `{ "price": "5.10" }` and an optional
+`asOf` calendar date (default: today in New York). Prices must be positive decimal USD with
+at most four decimals; future dates are rejected. Repeating a manual mark for the same leg
+and date replaces it without removing feed marks. On a date shared by both sources, manual
+wins. Both endpoints are private and uncached. This adds no assignment or hedge-link action.
 
 After changing `src/db/schema.ts`, run `pnpm db:generate` and commit all generated files.
 `pnpm db:drift` rejects both tracked and untracked migration changes. Tests apply the real

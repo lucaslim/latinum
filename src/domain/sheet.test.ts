@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { filterPositions, type OpenPosition, sortByExpiry } from "./sheet.ts";
 import { prototypeBook } from "./test/fixtures.ts";
 
-const book: OpenPosition[] = prototypeBook.map((p, i) => ({ ...p, id: `p${i}` }));
+const book: OpenPosition[] = prototypeBook.map((p, i) => ({
+  ...p,
+  id: `p${i}`,
+  campaignId: `c${i}`,
+}));
 const tickers = (positions: readonly OpenPosition[]) => positions.map((p) => p.underlying);
 
 describe("Sheet filters", () => {

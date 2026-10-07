@@ -41,6 +41,7 @@ export default defineConfig({
         "src/db/repository.ts",
         "src/db/money.ts",
         "src/db/book.ts",
+        "src/db/campaigns.ts",
         "src/ops/*.ts",
       ],
       reporter: ["text", "lcov", "json-summary"],

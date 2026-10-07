@@ -17,7 +17,11 @@ export function positionsRoute({ withDb, now }: PositionsDeps): Handler {
     const rows = await withDb((db) => repository(db).readOpenBook());
     const body: OpenPositionsResponse = {
       asOf: todayNY(now()),
-      positions: rows.map((row) => ({ id: row.id, ...toBookPosition(row) })),
+      positions: rows.map((row) => ({
+        id: row.id,
+        campaignId: row.campaignId,
+        ...toBookPosition(row),
+      })),
     };
     c.header("Cache-Control", "private, no-store");
     return c.json(body);

@@ -117,7 +117,7 @@ export function PositionsSheet({
 }) {
   const [filter, setFilter] = useState<SheetFilter>(initialFilter);
   const visible = sortByExpiry(filterPositions(positions, filter));
-  const rows = visible.map((p) => ({ id: p.id, ...sheetRow(p, asOf) }));
+  const rows = visible.map((p) => ({ id: p.id, campaignId: p.campaignId, ...sheetRow(p, asOf) }));
   const footerTotals = bookTotals(visible);
 
   return (
@@ -163,7 +163,9 @@ export function PositionsSheet({
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className={r.tint ? `row ${r.tint}` : "row"}>
-                <td className="tk">{r.ticker}</td>
+                <td className="tk">
+                  <a href={`#/campaigns/${r.campaignId}`}>{r.ticker}</a>
+                </td>
                 <td className="num">{r.strike}</td>
                 <td>
                   <Value cell={r.type} />
@@ -200,7 +202,8 @@ export function PositionsSheet({
         {rows.map((r) => (
           <article key={r.id} className={r.tint ? `card ${r.tint}` : "card"}>
             <div className="l1">
-              <b>{r.ticker}</b> <span className="num">{r.strike}</span> <Value cell={r.type} />{" "}
+              <a href={`#/campaigns/${r.campaignId}`}>{r.ticker}</a>{" "}
+              <span className="num">{r.strike}</span> <Value cell={r.type} />{" "}
               <span className="tone-muted">{r.side}</span>
             </div>
             <div className="r1 num">
