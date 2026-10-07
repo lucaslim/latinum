@@ -122,6 +122,42 @@ describe("Campaign detail", () => {
     expect(output).toContain("Max profit Unlimited");
     expect(output).toContain("Return on risk —");
   });
+  describe.each(["long_call", "long_put"] as const)("CSP with a %s hedge", (strategy) => {
+    const longHedges: CampaignResponse["positions"] = aapl.positions.map((position) => ({
+      ...position,
+      strategy,
+      role: "hedge",
+      legs: position.legs.map((leg) => ({
+        ...leg,
+        kind: strategy === "long_call" ? "call" : "put",
+      })),
+    }));
+
+    it("shows no linked hedge and zero scenario values while keeping the standalone card", () => {
+      const html = render({
+        ...nvdlCampaign,
+        positions: [
+          ...nvdlCampaign.positions.filter((position) => position.role === "income"),
+          ...longHedges,
+        ],
+      });
+      const aside = html.match(/<aside class="campaign-linked">[\s\S]*?<\/aside>/)?.[0] ?? "";
+      expect(text(aside).trim()).toBe("Linked hedge No linked hedge Debit $0 Max payout $0");
+      expect(html).toContain('aria-label="AAPL hedge"');
+      expect(html).toContain("<h2>AAPL hedge</h2>");
+    });
+
+    it("names only the debit spread whose values contribute to the linked scenario", () => {
+      const html = render({
+        ...nvdlCampaign,
+        positions: [...nvdlCampaign.positions, ...longHedges],
+      });
+      const aside = html.match(/<aside class="campaign-linked">[\s\S]*?<\/aside>/)?.[0] ?? "";
+      expect(text(aside).trim()).toBe("Linked hedge NVDA Debit $218 Max payout $1,000");
+      expect(html).toContain('aria-label="AAPL hedge"');
+      expect(html).toContain("<h2>AAPL hedge</h2>");
+    });
+  });
   it("renders an empty recorded campaign without inventing any event", () => {
     const html = render({ ...aapl, positions: [] });
     expect(text(html)).toContain("No trades recorded.");

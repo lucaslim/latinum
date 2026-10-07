@@ -89,6 +89,15 @@ function MarkForm({
 
 export function CampaignDetail({ campaign, onSaveMark }: CampaignDetailProps) {
   const view = buildCampaignView(campaign);
+  const spreadPositionIds = new Set(
+    campaign.positions
+      .filter(
+        (position) =>
+          position.strategy === "put_debit_spread" || position.strategy === "call_debit_spread",
+      )
+      .map((position) => position.id),
+  );
+  const scenarioHedges = view.hedges.filter((hedge) => spreadPositionIds.has(hedge.positionId));
   const capitalTerms = campaign.positions
     .filter(
       (position) =>
@@ -155,8 +164,8 @@ export function CampaignDetail({ campaign, onSaveMark }: CampaignDetailProps) {
           <aside className="campaign-linked">
             <h3>Linked hedge</h3>
             <p>
-              {view.hedges.length
-                ? view.hedges.map((hedge) => hedge.underlying).join(", ")
+              {scenarioHedges.length
+                ? scenarioHedges.map((hedge) => hedge.underlying).join(", ")
                 : "No linked hedge"}
             </p>
             <dl className="campaign-metrics">
