@@ -65,93 +65,115 @@ const firstId = "20000000-0000-4000-8000-000000000002";
 const secondId = "20000000-0000-4000-8000-000000000003";
 const at = "2026-10-01T01:00:00.123Z";
 
-test("CSV includes every raw column, lossless four-decimal USD and null fields, in ID order", async () => {
-  const { db, client } = await testDatabase();
-  try {
-    const accountId = "20000000-0000-4000-8000-000000000004";
-    const campaignId = "20000000-0000-4000-8000-000000000005";
-    const positionId = "20000000-0000-4000-8000-000000000006";
-    await db.insert(s.accounts).values({ id: accountId, label: "CSV", broker: "manual" });
-    await db.insert(s.campaigns).values({
-      id: campaignId,
-      accountId,
-      title: "CSV",
-      openedOn: "2026-09-30",
-    });
-    await db.insert(s.positions).values({
-      id: positionId,
-      campaignId,
-      underlying: "NVDL",
-      strategy: "csp",
-      role: "income",
-      openedOn: "2026-09-30",
-    });
-    await db.insert(s.legs).values({
-      id: legId,
-      positionId,
-      kind: "put",
-      side: "short",
-      underlying: "NVDL",
-      strike: m("26.67"),
-      expiry: "2026-10-16",
-    });
-    const chainId = "20000000-0000-4000-8000-000000000007";
-    const rollId = "20000000-0000-4000-8000-000000000008";
-    await db.insert(s.rollChains).values({ id: chainId, campaignId });
-    await db.insert(s.rolls).values({ id: rollId, rollChainId: chainId, rolledOn: "2026-09-30" });
-    await db.insert(s.trades).values([
-      {
-        id: secondId,
-        legId,
-        action: "close",
-        tradeDate: "2026-10-01",
-        quantity: 1,
-        price: m("0"),
-        cash: m("-108.50"),
-        fees: m("0"),
-        createdAt: new Date(at),
-      },
-      {
-        id: firstId,
-        legId,
-        action: "open",
-        tradeDate: "2026-09-30",
-        executedAt: new Date(at),
-        quantity: 1,
-        price: m("1.0850"),
-        cash: m("108.50"),
-        fees: m("-0.6527"),
-        rollId,
-        source: "ibkr_flex",
-        createdAt: new Date(at),
-      },
-    ]);
-    const app = exportApp((use) => use(db));
-    const csv = await app.request("/api/export?format=csv");
-    expect(csv.status).toBe(200);
-    expect(await csv.text()).toBe(
-      csvHeader +
-        `${firstId},${legId},open,2026-09-30,${at},1,1.0850,108.5000,-0.6527,USD,${rollId},ibkr_flex,${at}\r\n` +
-        `${secondId},${legId},close,2026-10-01,,1,0.0000,-108.5000,0.0000,USD,,manual,${at}\r\n`,
-    );
-    const json = await app.request("/api/export?format=json");
-    const backup = (await json.json()) as JournalExport;
-    expect(json.status).toBe(200);
-    expect(
-      backup.tables.trades.map(({ price, cash, fees, executedAt }) => ({
-        price,
-        cash,
-        fees,
-        executedAt,
-      })),
-    ).toEqual([
-      { price: 10850, cash: 1085000, fees: -6527, executedAt: at },
-      { price: 0, cash: -1085000, fees: 0, executedAt: null },
-    ]);
-  } finally {
-    await client.close();
-  }
-});
+test.each(["available", "missing"])(
+  "CSV includes every raw column, lossless four-decimal USD and null fields, in ID order (marks %s)",
+  async (marks) => {
+    const { db, client } = await testDatabase();
+    try {
+      const accountId = "20000000-0000-4000-8000-000000000004";
+      const campaignId = "20000000-0000-4000-8000-000000000005";
+      const positionId = "20000000-0000-4000-8000-000000000006";
+      await db.insert(s.accounts).values({ id: accountId, label: "CSV", broker: "manual" });
+      await db.insert(s.campaigns).values({
+        id: campaignId,
+        accountId,
+        title: "CSV",
+        openedOn: "2026-09-30",
+      });
+      await db.insert(s.positions).values({
+        id: positionId,
+        campaignId,
+        underlying: "NVDL",
+        strategy: "csp",
+        role: "income",
+        openedOn: "2026-09-30",
+      });
+      await db.insert(s.legs).values({
+        id: legId,
+        positionId,
+        kind: "put",
+        side: "short",
+        underlying: "NVDL",
+        strike: m("26.67"),
+        expiry: "2026-10-16",
+      });
+      const chainId = "20000000-0000-4000-8000-000000000007";
+      const rollId = "20000000-0000-4000-8000-000000000008";
+      await db.insert(s.rollChains).values({ id: chainId, campaignId });
+      await db.insert(s.rolls).values({ id: rollId, rollChainId: chainId, rolledOn: "2026-09-30" });
+      await db.insert(s.trades).values([
+        {
+          id: secondId,
+          legId,
+          action: "close",
+          tradeDate: "2026-10-01",
+          quantity: 1,
+          price: m("0"),
+          cash: m("-108.50"),
+          fees: m("0"),
+          createdAt: new Date(at),
+        },
+        {
+          id: firstId,
+          legId,
+          action: "open",
+          tradeDate: "2026-09-30",
+          executedAt: new Date(at),
+          quantity: 1,
+          price: m("1.0850"),
+          cash: m("108.50"),
+          fees: m("-0.6527"),
+          rollId,
+          source: "ibkr_flex",
+          createdAt: new Date(at),
+        },
+      ]);
+      if (marks === "missing") await client.exec("drop table marks");
+      const queries = vi.spyOn(client, "query");
+      const errors: Error[] = [];
+      const app = exportApp((use) => use(db));
+      app.onError((err, c) => {
+        errors.push(err);
+        return c.text("Export failed", 500);
+      });
+      const csv = await app.request("/api/export?format=csv");
+      expect(csv.status).toBe(200);
+      expect(await csv.text()).toBe(
+        csvHeader +
+          `${firstId},${legId},open,2026-09-30,${at},1,1.0850,108.5000,-0.6527,USD,${rollId},ibkr_flex,${at}\r\n` +
+          `${secondId},${legId},close,2026-10-01,,1,0.0000,-108.5000,0.0000,USD,,manual,${at}\r\n`,
+      );
+      expect(queries.mock.calls.map(([query]) => query)).toEqual([
+        'select "id", "leg_id", "action", "trade_date", "executed_at", "quantity", "price", "cash", "fees", "currency", "roll_id", "source", "created_at" from "trades" order by "trades"."id"',
+      ]);
+      queries.mockRestore();
+      expect(errors).toEqual([]);
+      const json = await app.request("/api/export?format=json");
+      if (marks === "missing") {
+        expect(json.status).toBe(500);
+        expect(await json.text()).toBe("Export failed");
+        expect(json.headers.get("Content-Disposition")).toBeNull();
+        expect(errors.map((err) => err.message)).toEqual([expect.stringContaining('from "marks"')]);
+        return;
+      }
+      const backup = (await json.json()) as JournalExport;
+      expect(json.status).toBe(200);
+      expect(
+        backup.tables.trades.map(({ price, cash, fees, executedAt }) => ({
+          price,
+          cash,
+          fees,
+          executedAt,
+        })),
+      ).toEqual([
+        { price: 10850, cash: 1085000, fees: -6527, executedAt: at },
+        { price: 0, cash: -1085000, fees: 0, executedAt: null },
+      ]);
+    } finally {
+      await client.close();
+    }
+  },
+);
 
 test.each(["", "xml", "JSON", "Csv", " json"])(
   "rejects format=%j without opening a database",

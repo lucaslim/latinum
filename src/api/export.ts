@@ -1,6 +1,6 @@
 import type { Handler } from "hono";
 import type { WithDb } from "../db/database.ts";
-import { readJournalExport } from "../db/export.ts";
+import { readJournalExport, readTradeExport } from "../db/export.ts";
 import { type JournalExport, TRADE_CSV_COLUMNS } from "../db/export.types.ts";
 import { formatMoney4, type Money4 } from "../domain/money.ts";
 
@@ -29,13 +29,15 @@ export function exportRoute({ withDb }: { withDb: WithDb }): Handler {
     if (format !== "json" && format !== "csv")
       return c.json({ error: "format must be json or csv" }, 400);
 
-    const backup = await withDb(readJournalExport);
-    c.header("Cache-Control", "private, no-store");
     if (format === "csv") {
+      const trades = await withDb(readTradeExport);
+      c.header("Cache-Control", "private, no-store");
       c.header("Content-Disposition", 'attachment; filename="trading-journal-trades.csv"');
       c.header("Content-Type", "text/csv; charset=utf-8");
-      return c.body(tradesCsv(backup.tables.trades));
+      return c.body(tradesCsv(trades));
     }
+    const backup = await withDb(readJournalExport);
+    c.header("Cache-Control", "private, no-store");
     c.header("Content-Disposition", 'attachment; filename="trading-journal-backup.json"');
     return c.json(backup);
   };

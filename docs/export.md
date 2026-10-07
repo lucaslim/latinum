@@ -20,13 +20,14 @@ The table keys are the ten application table names, including `platform_heartbea
 Drizzle migration bookkeeping is excluded. Row properties use the schema's camelCase names.
 Money4 amounts are integer counts of 1/10,000 USD. Trading dates remain `YYYY-MM-DD`;
 timestamps use UTC ISO strings at the existing database adapter's millisecond precision.
-Nulls, IDs, tags, relationships, and closed rows are preserved. Tables are read in one
+Nulls, IDs, tags, relationships, and closed rows are preserved. JSON tables are read in one
 repeatable-read, read-only transaction and sorted by primary key (the composite key for marks).
 
 CSV contains every stored trade column, in `TRADE_CSV_COLUMNS` order, with no derived columns.
 Money is formatted as four-decimal USD amounts rather than scaled integers. Timestamps use
 UTC ISO strings; nullable columns are empty fields. CSV uses CRLF records and standard
-comma/quote/newline escaping. Trades are sorted by ID.
+comma/quote/newline escaping. CSV uses one trades-only query sorted by ID and does not depend
+on unrelated backup tables.
 
 The Download control offers JSON backup and raw trade CSV. The automated acceptance test
 restores downloaded JSON into a separately migrated, empty PGlite and checks the plan's seed

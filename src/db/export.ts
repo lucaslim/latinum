@@ -2,6 +2,14 @@ import type { Database } from "./database.ts";
 import type { JournalExport } from "./export.types.ts";
 import * as s from "./schema.ts";
 
+export async function readTradeExport(db: Database): Promise<JournalExport["tables"]["trades"]> {
+  return (await db.select().from(s.trades).orderBy(s.trades.id)).map((row) => ({
+    ...row,
+    executedAt: row.executedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  }));
+}
+
 export function readJournalExport(db: Database): Promise<JournalExport> {
   return db.transaction(
     async (tx) => ({
@@ -16,11 +24,7 @@ export function readJournalExport(db: Database): Promise<JournalExport> {
         positions: await tx.select().from(s.positions).orderBy(s.positions.id),
         legs: await tx.select().from(s.legs).orderBy(s.legs.id),
         rolls: await tx.select().from(s.rolls).orderBy(s.rolls.id),
-        trades: (await tx.select().from(s.trades).orderBy(s.trades.id)).map((row) => ({
-          ...row,
-          executedAt: row.executedAt?.toISOString() ?? null,
-          createdAt: row.createdAt.toISOString(),
-        })),
+        trades: await readTradeExport(tx),
         assignments: await tx.select().from(s.assignments).orderBy(s.assignments.id),
         marks: await tx.select().from(s.marks).orderBy(s.marks.legId, s.marks.asOf, s.marks.source),
         platform_heartbeat: (
