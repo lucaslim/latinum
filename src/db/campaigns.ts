@@ -11,8 +11,8 @@ export class ManualMarkConflictError extends Error {
 }
 
 export class ManualMarkDateError extends Error {
-  constructor() {
-    super("Leg was not open on mark date");
+  constructor(message = "Leg was not open on mark date") {
+    super(message);
   }
 }
 
@@ -145,6 +145,9 @@ export function campaignRepository(db: Database) {
         0,
       );
       if (balance <= 0) throw new ManualMarkConflictError();
+      const historicalBalance = trades
+        .filter((t) => t.tradeDate <= mark.asOf)
+        .reduce((n, t) => n + (t.action === "open" ? t.quantity : -t.quantity), 0);
       if (row.position.role !== "swing") {
         // Held-cover history stays a CC; only its surviving, uncovered stock becomes a swing.
         if (row.position.strategy !== "cc" || row.leg.kind !== "stock" || row.leg.side !== "long")
@@ -167,20 +170,25 @@ export function campaignRepository(db: Database) {
               options.map((leg) => leg.id),
             ),
           );
-        const coveredShares = options
-          .filter((leg) => leg.kind === "call" && leg.side === "short" && leg.coveredLegId === null)
-          .reduce((shares, leg) => {
-            const quantity = optionTrades
-              .filter((t) => t.legId === leg.id)
-              .reduce((n, t) => n + (t.action === "open" ? t.quantity : -t.quantity), 0);
-            return shares + BigInt(quantity) * BigInt(leg.multiplier);
-          }, 0n);
+        let coveredShares = 0n;
+        let historicalCoveredShares = 0n;
+        for (const leg of options.filter(
+          (leg) => leg.kind === "call" && leg.side === "short" && leg.coveredLegId === null,
+        )) {
+          for (const trade of optionTrades.filter((t) => t.legId === leg.id)) {
+            const shares =
+              BigInt(trade.quantity) *
+              BigInt(leg.multiplier) *
+              (trade.action === "open" ? 1n : -1n);
+            coveredShares += shares;
+            if (trade.tradeDate <= mark.asOf) historicalCoveredShares += shares;
+          }
+        }
         if (BigInt(balance) * BigInt(row.leg.multiplier) <= coveredShares)
           throw new ManualMarkConflictError();
+        if (BigInt(historicalBalance) * BigInt(row.leg.multiplier) <= historicalCoveredShares)
+          throw new ManualMarkDateError("Leg had no uncovered shares on mark date");
       }
-      const historicalBalance = trades
-        .filter((t) => t.tradeDate <= mark.asOf)
-        .reduce((n, t) => n + (t.action === "open" ? t.quantity : -t.quantity), 0);
       if (historicalBalance <= 0) throw new ManualMarkDateError();
       await tx
         .insert(s.marks)

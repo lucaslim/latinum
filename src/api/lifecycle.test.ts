@@ -442,11 +442,11 @@ test("held-cover shares accept marks when partially or fully released, but not w
       },
     ],
   });
-  const mark = () =>
+  const mark = (asOf?: string) =>
     app.request(`/api/legs/${stockLegId}/mark`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ price: "55" }),
+      body: JSON.stringify({ price: "55", ...(asOf === undefined ? {} : { asOf }) }),
     });
   expect((await mark()).status).toBe(409);
   const call = (await database.db.select().from(s.legs).where(eq(s.legs.positionId, cc))).find(
@@ -460,6 +460,10 @@ test("held-cover shares accept marks when partially or fully released, but not w
       })
     ).status,
   ).toBe(200);
+  const historical = await mark("2026-09-15");
+  expect(historical.status).toBe(400);
+  expect(await historical.json()).toEqual({ error: "Leg had no uncovered shares on mark date" });
+  expect(await database.db.select().from(s.marks).where(eq(s.marks.legId, stockLegId))).toEqual([]);
   expect((await mark()).status).toBe(200);
   const campaign = (await (
     await app.request(`/api/campaigns/${fixture.campaignId}`)
