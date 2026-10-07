@@ -265,6 +265,34 @@ test("JSON preserves every table and reproduces the literal plan seed totals aft
   }
 }, 20_000);
 
+test("restored heartbeat IDs are preserved and the next generated ID follows their maximum", async () => {
+  const source = await testDatabase();
+  const target = await testDatabase();
+  try {
+    await source.client.query(
+      "insert into platform_heartbeat (id, at, source) overriding system value values (42, $1, 'export-test'), (1, $1, 'earlier-id')",
+      [at],
+    );
+    const original = await download(source.db);
+    expect(original.tables.platform_heartbeat).toEqual([
+      { id: 1, at, source: "earlier-id" },
+      { id: 42, at, source: "export-test" },
+    ]);
+    await restoreExport(target.db, original);
+    expect(await download(target.db)).toEqual(original);
+
+    await repository(target.db).recordHeartbeat({ at: new Date(at), source: "after-restore" });
+    expect((await download(target.db)).tables.platform_heartbeat).toEqual([
+      { id: 1, at, source: "earlier-id" },
+      { id: 42, at, source: "export-test" },
+      { id: 43, at, source: "after-restore" },
+    ]);
+  } finally {
+    await source.client.close();
+    await target.client.close();
+  }
+}, 20_000);
+
 test("an empty JSON backup restores without inserting empty arrays", async () => {
   const source = await testDatabase();
   const target = await testDatabase();
@@ -273,6 +301,14 @@ test("an empty JSON backup restores without inserting empty arrays", async () =>
     await restoreExport(target.db, original);
     expect(await download(target.db)).toEqual(original);
     expect(original.tables.accounts).toEqual([]);
+    expect(original.tables.platform_heartbeat).toEqual([]);
+    await repository(target.db).recordHeartbeat({
+      at: new Date(at),
+      source: "after-empty-restore",
+    });
+    expect((await download(target.db)).tables.platform_heartbeat).toEqual([
+      { id: 1, at, source: "after-empty-restore" },
+    ]);
   } finally {
     await source.client.close();
     await target.client.close();

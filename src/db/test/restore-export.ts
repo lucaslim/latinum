@@ -46,5 +46,12 @@ export async function restoreExport(db: Database, backup: JournalExport): Promis
         values (${row.id}, ${new Date(row.at)}, ${row.source})
       `);
     }
+    await tx.execute(sql`
+      select setval(
+        pg_get_serial_sequence('platform_heartbeat', 'id'),
+        coalesce(max(id), 1),
+        max(id) is not null
+      ) from platform_heartbeat
+    `);
   });
 }
