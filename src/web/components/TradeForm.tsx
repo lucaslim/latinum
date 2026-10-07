@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from "react";
-import { CalendarCoverageError } from "../../domain/calendar.ts";
+import { CalendarCoverageError, FIRST_YEAR, LAST_YEAR } from "../../domain/calendar.ts";
 import type { IsoDate } from "../../domain/dates.ts";
 import { expiryChips } from "../../domain/expiry.ts";
 import { formatMoney4, type Money4 } from "../../domain/money.ts";
@@ -290,8 +290,8 @@ export function TradeForm({
           <>
             {calendarUnsupported && (
               <p role="status">
-                NYSE calendar unsupported for these expiry quick choices (coverage: 2026–2028).
-                Enter an expiry date manually.
+                NYSE calendar unsupported for these expiry quick choices (coverage: {FIRST_YEAR}–
+                {LAST_YEAR}). Enter an expiry date manually.
               </p>
             )}
             <fieldset aria-label="Expiry quick choices" className="trade-chips">

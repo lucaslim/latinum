@@ -53,8 +53,8 @@ const TABLE: Record<number, { holidays: readonly string[]; earlyCloses: readonly
 };
 
 const years = Object.keys(TABLE).map(Number);
-const FIRST_YEAR = Math.min(...years);
-const LAST_YEAR = Math.max(...years);
+export const FIRST_YEAR = Math.min(...years);
+export const LAST_YEAR = Math.max(...years);
 
 const holidays = new Set(Object.values(TABLE).flatMap((y) => y.holidays.map(parseIsoDate)));
 const earlyCloses = new Set(Object.values(TABLE).flatMap((y) => y.earlyCloses.map(parseIsoDate)));

@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { FIRST_YEAR, LAST_YEAR } from "../../domain/calendar.ts";
 import { parseIsoDate } from "../../domain/dates.ts";
 import * as expiryModule from "../../domain/expiry.ts";
 import type { Money4 } from "../../domain/money.ts";
@@ -51,7 +52,7 @@ describe("TradeForm", () => {
       expect(html).not.toMatch(/<fieldset[^>]*disabled/);
       for (const strategy of TRADE_STRATEGIES) expect(html).toContain(STRATEGY_LABELS[strategy]);
       expect(html).toContain(
-        'role="status">NYSE calendar unsupported for these expiry quick choices (coverage: 2026–2028). Enter an expiry date manually.',
+        `role="status">NYSE calendar unsupported for these expiry quick choices (coverage: ${FIRST_YEAR}–${LAST_YEAR}). Enter an expiry date manually.`,
       );
       expect(html).toMatch(/<fieldset aria-label="Expiry quick choices"[^>]*><\/fieldset>/);
       expect(html).toContain(">Save trade</button>");
