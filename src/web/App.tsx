@@ -5,6 +5,7 @@ import { useOpenPositions } from "./api.ts";
 import { useCampaign } from "./campaignApi.ts";
 import { CampaignDetail } from "./components/CampaignDetail.tsx";
 import { DownloadExport } from "./components/DownloadExport.tsx";
+import { MonthlyPnlRoute } from "./components/MonthlyPnlDashboard.tsx";
 import { PositionsSheet } from "./components/PositionsSheet.tsx";
 import { ThemeSelect } from "./components/ThemeSelect.tsx";
 import { TradeEditor } from "./components/TradeEditor.tsx";
@@ -170,6 +171,7 @@ export function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
   const campaignId = /^#\/campaigns\/([^/]+)$/.exec(hash)?.[1];
+  const monthlyPnl = hash === "#/pl";
 
   return (
     <div className="frame">
@@ -177,15 +179,28 @@ export function App() {
         <header className="side">
           <div className="logo">Trading Journal</div>
           <nav aria-label="Main">
-            <a className="nav-link" href="#/" aria-current={campaignId ? undefined : "page"}>
+            <a
+              className="nav-link"
+              href="#/"
+              aria-current={campaignId || monthlyPnl ? undefined : "page"}
+            >
               Positions
+            </a>
+            <a className="nav-link" href="#/pl" aria-current={monthlyPnl ? "page" : undefined}>
+              Monthly P/L
             </a>
           </nav>
           <ThemeSelect />
         </header>
         <main className="main">
           <DownloadExport />
-          {campaignId ? <CampaignRoute key={campaignId} id={campaignId} /> : <PositionsRoute />}
+          {campaignId ? (
+            <CampaignRoute key={campaignId} id={campaignId} />
+          ) : monthlyPnl ? (
+            <MonthlyPnlRoute />
+          ) : (
+            <PositionsRoute />
+          )}
         </main>
       </div>
     </div>

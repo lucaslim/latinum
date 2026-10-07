@@ -5,7 +5,7 @@ import { expect, test, vi } from "vitest";
 import { exportRoute } from "../api/export.ts";
 import { parseMoney4 as m } from "../domain/money.ts";
 import { bookTotals } from "../domain/totals.ts";
-import { toBookPosition } from "./book.ts";
+import { toBookPositions } from "./book.ts";
 import { readJournalExport } from "./export.ts";
 import type { JournalExport } from "./export.types.ts";
 import { repository } from "./repository.ts";
@@ -234,21 +234,22 @@ test("JSON preserves every table and reproduces the literal plan seed totals aft
       strike: 266700,
       adjusted: true,
     });
-    expect(original.tables.assignments).toEqual([
-      {
-        id: assignment,
-        optionTradeId: optionTrade,
-        stockTradeId: stockTrade,
-        shares: 100,
-        premiumPerShare: 10850,
-      },
-    ]);
+    expect(original.tables.assignments).toHaveLength(2);
+    expect(original.tables.assignments.find((row) => row.id === assignment)).toEqual({
+      id: assignment,
+      optionTradeId: optionTrade,
+      stockTradeId: stockTrade,
+      shares: 100,
+      premiumPerShare: 10850,
+    });
 
     await restoreExport(target.db, original);
     expect(await download(target.db)).toEqual(original);
     const loaded = await repository(target.db).readOpenPositions(accountId);
-    expect(loaded).toHaveLength(12);
-    const totals = bookTotals(loaded.map(toBookPosition));
+    expect(loaded).toHaveLength(13);
+    const positions = toBookPositions(loaded);
+    expect(positions).toHaveLength(12);
+    const totals = bookTotals(positions);
     expect(totals).toMatchObject({
       contracts: 77,
       premium: 144500000,
