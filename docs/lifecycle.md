@@ -63,5 +63,8 @@ uncover assigned calls fail atomically with 409. Both held-share and referenced 
 calls use the same strategy model.
 
 If a lifecycle POST commits but its refresh fails, the campaign replaces stale action forms
-with an error and a read-only retry. Another mutation is blocked until the campaign reloads;
-retrying the read never resubmits the saved mutation.
+with an error and a read-only retry. A lost POST response, unreadable successful response, or
+server/proxy 5xx is also an uncertain outcome: the same read-only recovery blocks resubmission
+until authoritative campaign data reloads. Definitive HTTP 4xx rejections keep the form available
+for correction. Retrying the read never resubmits a mutation; this is UI failure containment,
+not a persisted request-ID/idempotency contract.

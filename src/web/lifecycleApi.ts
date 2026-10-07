@@ -18,6 +18,15 @@ export type SaveLifecycle = (
   mutation: LifecycleMutation,
 ) => Promise<LifecycleResult>;
 
+export class LifecycleHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, detail: string, options?: ErrorOptions) {
+    super(`${detail} (HTTP ${status})`, options);
+    this.status = status;
+  }
+}
+
 export async function saveLifecycle(
   positionId: string,
   mutation: LifecycleMutation,
@@ -40,14 +49,14 @@ export async function saveLifecycle(
       try {
         body = await response.json();
       } catch (cause) {
-        throw new Error(`${fallback} (HTTP ${response.status})`, { cause });
+        throw new LifecycleHttpError(response.status, fallback, { cause });
       }
     }
     const detail =
       typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
         ? body.error
         : fallback;
-    throw new Error(`${detail} (HTTP ${response.status})`);
+    throw new LifecycleHttpError(response.status, detail);
   }
   return response.json();
 }

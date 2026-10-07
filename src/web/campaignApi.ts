@@ -4,7 +4,12 @@ import type {
   ManualMarkRequest,
   ManualMarkResponse,
 } from "../domain/campaign.ts";
-import { saveLifecycle as postLifecycle, type SaveLifecycle } from "./lifecycleApi.ts";
+import {
+  LifecycleHttpError,
+  type LifecycleResult,
+  saveLifecycle as postLifecycle,
+  type SaveLifecycle,
+} from "./lifecycleApi.ts";
 
 export type CampaignLoad =
   | { status: "loading" }
@@ -84,7 +89,20 @@ export function useCampaign(id: string) {
   const saveLifecycle: SaveLifecycle = async (positionId, mutation) => {
     const request = active.current;
     if (!request || request.id !== id) throw new Error("Campaign is no longer active");
-    const result = await postLifecycle(positionId, mutation, request.abort.signal);
+    let result: LifecycleResult;
+    try {
+      result = await postLifecycle(positionId, mutation, request.abort.signal);
+    } catch (error) {
+      if (error instanceof LifecycleHttpError && error.status >= 400 && error.status < 500)
+        throw error;
+      const message =
+        "Lifecycle action outcome is uncertain. Reload the campaign before another action.";
+      if (active.current === request) {
+        active.current = null;
+        setLoad({ status: "error", message });
+      }
+      throw new Error(message, { cause: error });
+    }
     const revision = ++request.revision;
     let data: CampaignResponse;
     try {

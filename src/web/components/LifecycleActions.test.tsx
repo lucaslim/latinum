@@ -71,6 +71,7 @@ describe("Lifecycle transport", () => {
         saveLifecycle("position", { action: "expire", input: {} }, new AbortController().signal),
       ).rejects.toMatchObject({
         message: "Could not save lifecycle action (HTTP 502)",
+        status: 502,
         cause: expect.any(SyntaxError),
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);

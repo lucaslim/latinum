@@ -100,19 +100,60 @@ test("saved mutation with failed refresh removes stale ready state and blocks an
   expect(fetch).toHaveBeenCalledTimes(4);
 });
 
-test("rejected mutation keeps the known ready snapshot and never performs a refresh", async () => {
-  const fetch = vi
-    .fn()
-    .mockResolvedValueOnce(Response.json(campaign))
-    .mockResolvedValueOnce(
-      Response.json({ error: "Close exceeds open quantity" }, { status: 409 }),
-    );
-  vi.stubGlobal("fetch", fetch);
-  const actions = useCampaign("campaign");
-  await vi.waitFor(() => expect(hooks.states[0]).toEqual({ status: "ready", data: campaign }));
-  await expect(actions.saveLifecycle("position", { action: "expire", input: {} })).rejects.toThrow(
-    "Close exceeds open quantity",
-  );
-  expect(hooks.states[0]).toEqual({ status: "ready", data: campaign });
-  expect(fetch).toHaveBeenCalledTimes(2);
-});
+test.each(["lost response", "unreadable success", "server failure"])(
+  "an uncertain mutation outcome (%s) blocks stale actions until a read-only retry",
+  async (failure) => {
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json(campaign));
+    if (failure === "lost response") fetch.mockRejectedValueOnce(new Error("Connection lost"));
+    else
+      fetch.mockResolvedValueOnce(
+        new Response(failure === "unreadable success" ? "" : "Proxy error", {
+          status: failure === "unreadable success" ? 200 : 502,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    fetch.mockResolvedValueOnce(Response.json(campaign));
+    vi.stubGlobal("fetch", fetch);
+    const actions = useCampaign("campaign");
+    await vi.waitFor(() => expect(hooks.states[0]).toEqual({ status: "ready", data: campaign }));
+    await expect(
+      actions.saveLifecycle("position", {
+        action: "close",
+        input: { fills: [{ legId: "leg", quantity: 5, price: "0" }] },
+      }),
+    ).rejects.toThrow("Lifecycle action outcome is uncertain");
+    expect(hooks.states[0]).toEqual({
+      status: "error",
+      message: "Lifecycle action outcome is uncertain. Reload the campaign before another action.",
+    });
+    await expect(
+      actions.saveLifecycle("position", { action: "expire", input: {} }),
+    ).rejects.toThrow("Campaign is no longer active");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+    actions.retry();
+    hooks.index = 0;
+    useCampaign("campaign");
+    await vi.waitFor(() => expect(hooks.states[0]).toEqual({ status: "ready", data: campaign }));
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  },
+);
+
+test.each([400, 404, 409])(
+  "HTTP %s rejection keeps the known ready snapshot and never performs a refresh",
+  async (status) => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(campaign))
+      .mockResolvedValueOnce(Response.json({ error: "Close exceeds open quantity" }, { status }));
+    vi.stubGlobal("fetch", fetch);
+    const actions = useCampaign("campaign");
+    await vi.waitFor(() => expect(hooks.states[0]).toEqual({ status: "ready", data: campaign }));
+    await expect(
+      actions.saveLifecycle("position", { action: "expire", input: {} }),
+    ).rejects.toThrow("Close exceeds open quantity");
+    expect(hooks.states[0]).toEqual({ status: "ready", data: campaign });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  },
+);
