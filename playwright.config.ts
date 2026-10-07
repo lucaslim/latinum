@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const port = 4173;
-const apiPort = 8788;
+const port = Number(process.env.E2E_WEB_PORT ?? 4173);
+const apiPort = Number(process.env.E2E_API_PORT ?? 8788);
 
 export default defineConfig({
   testDir: "e2e",
