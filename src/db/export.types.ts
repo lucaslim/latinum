@@ -33,4 +33,5 @@ export const TRADE_CSV_COLUMNS = [
   "rollId",
   "source",
   "createdAt",
-] as const satisfies readonly (keyof JournalExport["tables"]["trades"][number])[];
+  "realizedPnl",
+] as const satisfies readonly (keyof JournalExport["tables"]["trades"][number] | "realizedPnl")[];
