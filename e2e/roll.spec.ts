@@ -106,6 +106,7 @@ for (const width of [1400, 390]) {
     await expect(chain).toContainText("Realized gross −$56.00");
     await expect(chain).toContainText("Realized net −$56.00");
     await expect(chain).toContainText("Booked in 2026-10");
+    await expect(page.getByRole("form", { name: "Roll position" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Roll options", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Roll options", exact: true }).click();
     await expect(page.getByRole("form", { name: "Roll position" })).toContainText(

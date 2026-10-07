@@ -28,6 +28,10 @@ Prices and strikes are decimal USD strings; fees are zero or negative decimal ch
 Omitted fees are zero. The close date defaults to today in New York and cannot be future.
 The replacement expiry is later than the current expiry. The form offers six subsequent
 holiday-adjusted Friday expiries and recalculates gross/net derived amounts as inputs change.
+Close price starts from the mark or last opening price; replacement price starts from the
+last opening price. These are editable historical defaults, not current market quotes.
+After refresh removes the selected source from the open candidates, the editor closes;
+rolling any remaining position requires explicitly opening the form again.
 
 One transaction reuses the lifecycle close path, creates the replacement position, legs
 and opening trades, and records the roll and chain. Both close and new opening trades carry

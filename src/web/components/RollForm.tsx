@@ -45,17 +45,13 @@ function initialFills(position: CampaignPosition): FillFields[] {
     const entry = leg.trades.findLast((trade) => trade.action === "open")?.price;
     if (entry === undefined || leg.strike === null)
       throw new Error("Option has no opening price or strike");
-    const prototype =
-      position.underlying === "TQQQ" &&
-      position.strategy === "csp" &&
-      leg.strike === parseMoney4("55");
     const fee = formatMoney4(mulMoney4(parseMoney4("0.65"), openLegQuantity(leg)), 2);
     return {
       legId: leg.id,
-      closePrice: prototype ? "3.19" : formatMoney4(leg.mark?.price ?? entry),
+      closePrice: formatMoney4(leg.mark?.price ?? entry),
       closeFees: fee,
       strike: formatMoney4(leg.strike),
-      openPrice: prototype ? "3.54" : formatMoney4(entry),
+      openPrice: formatMoney4(entry),
       openFees: fee,
     };
   });
@@ -176,10 +172,15 @@ export function RollForm({
     (position) => position.closedOn === null && openOptions(position).length > 0,
   );
   if (candidates.length === 0) return null;
-  const selected = candidates.find((position) => position.id === selectedId) ?? candidates[0];
+  const selected = candidates.find((position) => position.id === selectedId);
+  const defaultId = candidates[0]?.id ?? null;
   return (
     <section className="campaign-panel roll-panel" aria-label="Roll options">
-      <button type="button" disabled={pending} onClick={() => setSelectedId(selected?.id ?? null)}>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => setSelectedId(selected?.id ?? defaultId)}
+      >
         Roll options
       </button>
       {selectedId !== null && selected && (

@@ -475,6 +475,8 @@ describe("RollForm", () => {
         ],
       };
       const { render } = setup(adjusted);
+      change(render(), `closePrice-${shortId}`, "3.19");
+      change(render(), `openPrice-${shortId}`, "3.54");
       expect(find(render(), "button", "Save roll").props.disabled).toBe(false);
       expect(content(render())).toContain(`New collateral ${collateral}`);
       expect(content(render())).toContain("New breakeven $51.46");
@@ -509,7 +511,7 @@ describe("RollForm", () => {
     expect(content(render())).toContain("New return on risk 549.4%");
   });
 
-  it("uses the TQQQ prototype defaults and live new income metrics", () => {
+  it("defaults TQQQ fills to entry, then previews explicit prototype acceptance fills", () => {
     const first = campaign.positions[0];
     const short = first?.legs[1];
     if (!first || !short) throw new Error("Missing fixture");
@@ -544,8 +546,10 @@ describe("RollForm", () => {
       ],
     };
     const { render } = setup(tqqq);
-    expect(find(render(), "input", `closePrice-${shortId}`).props.value).toBe("3.19");
-    expect(find(render(), "input", `openPrice-${shortId}`).props.value).toBe("3.54");
+    expect(find(render(), "input", `closePrice-${shortId}`).props.value).toBe("2.4500");
+    expect(find(render(), "input", `openPrice-${shortId}`).props.value).toBe("2.4500");
+    change(render(), `closePrice-${shortId}`, "3.19");
+    change(render(), `openPrice-${shortId}`, "3.54");
     expect(find(render(), "input", "expiry").props.value).toBe("2026-11-06");
     expect(content(render())).toContain("Closing realized gross −$1,480.00");
     expect(content(render())).toContain("Roll cash gross +$700.00");
@@ -605,6 +609,84 @@ describe("RollForm", () => {
       { preventDefault: vi.fn() },
     );
     expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes the editor after a roll refresh replaces the source ID instead of choosing another position", async () => {
+    const first = campaign.positions[0];
+    if (!first) throw new Error("Missing source position");
+    let current = campaign;
+    const unrelated = {
+      ...first,
+      id: "00000000-0000-4000-8000-000000000010",
+      underlying: "NVDA",
+      legs: first.legs.map((leg, index) => ({
+        ...leg,
+        id: `00000000-0000-4000-8000-00000000001${index + 1}`,
+        underlying: "NVDA",
+      })),
+    };
+    const replacement = {
+      ...first,
+      id: "00000000-0000-4000-8000-000000000020",
+      openedOn: d("2026-10-01"),
+      legs: first.legs.map((leg, index) => ({
+        ...leg,
+        id: `00000000-0000-4000-8000-00000000002${index + 1}`,
+        expiry: d("2026-11-06"),
+        trades: [
+          {
+            id: `replacement-${index}`,
+            action: "open" as const,
+            tradeDate: d("2026-10-01"),
+            quantity: 2,
+            price: m(leg.side === "long" ? "0.77" : "0"),
+            cash: m(leg.side === "long" ? "-154" : "0"),
+            fees: m("0"),
+          },
+        ],
+      })),
+    };
+    const save = vi.fn().mockImplementation(async () => {
+      current = {
+        ...campaign,
+        positions: [
+          {
+            ...first,
+            closedOn: d("2026-10-01"),
+            legs: first.legs.map((leg) => ({
+              ...leg,
+              trades: [
+                ...leg.trades,
+                {
+                  id: `close-${leg.id}`,
+                  action: "close" as const,
+                  tradeDate: d("2026-10-01"),
+                  quantity: 2,
+                  price: m(leg.side === "long" ? "0.42" : "0"),
+                  cash: m(leg.side === "long" ? "84" : "0"),
+                  fees: m("0"),
+                },
+              ],
+            })),
+          },
+          unrelated,
+          replacement,
+        ],
+      };
+      render();
+      return {};
+    });
+    const render = () => renderTree(<RollForm campaign={current} onSave={save} />);
+    click(render(), "Roll options");
+    qqqFills(render);
+    await (find(render(), "form", "Roll position").props.onSubmit as (e: unknown) => Promise<void>)(
+      { preventDefault: vi.fn() },
+    );
+    expect(elements(render()).filter((el) => el.type === "form")).toHaveLength(0);
+    expect(find(render(), "button", "Roll options").props.disabled).toBe(false);
+    click(render(), "Roll options");
+    expect(content(render())).toContain("Roll NVDA");
+    expect(save).toHaveBeenCalledTimes(1);
   });
 
   it("resets old fill intent when the displayed position revision changes", () => {
