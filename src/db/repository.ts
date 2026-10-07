@@ -1,5 +1,7 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { divMoney4, mulMoney4, sumMoney4 } from "../domain/money.ts";
+import { assignedShareBasis } from "../domain/wheel.ts";
 import * as s from "./schema.ts";
 
 export type NewTrade = Omit<typeof s.trades.$inferInsert, "legId">;
@@ -9,6 +11,7 @@ export type NewPosition = Omit<typeof s.positions.$inferInsert, "closedOn"> & { 
 export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
   async function appendTrades(positionId: string, events: (typeof s.trades.$inferInsert)[]) {
     return db.transaction(async (tx) => {
+      // Assigned CC saves lock this same stock parent before reserving coverage.
       const [position] = await tx
         .select()
         .from(s.positions)
@@ -40,6 +43,51 @@ export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
           ? lastDate
           : null;
       await tx.update(s.positions).set({ closedOn }).where(eq(s.positions.id, positionId));
+      const stocks = legs.filter((leg) => leg.kind === "stock" && leg.side === "long");
+      if (stocks.length) {
+        const calls = await tx
+          .select({ leg: s.legs })
+          .from(s.legs)
+          .innerJoin(s.positions, eq(s.legs.positionId, s.positions.id))
+          .where(
+            and(
+              inArray(
+                s.legs.coveredLegId,
+                stocks.map((stock) => stock.id),
+              ),
+              eq(s.legs.kind, "call"),
+              eq(s.legs.side, "short"),
+              isNull(s.positions.closedOn),
+            ),
+          );
+        const callTrades = calls.length
+          ? await tx
+              .select()
+              .from(s.trades)
+              .where(
+                inArray(
+                  s.trades.legId,
+                  calls.map(({ leg }) => leg.id),
+                ),
+              )
+          : [];
+        for (const stock of stocks) {
+          const covered = calls
+            .filter(({ leg }) => leg.coveredLegId === stock.id)
+            .reduce((shares, { leg }) => {
+              const quantity = callTrades
+                .filter((event) => event.legId === leg.id)
+                .reduce(
+                  (qty, event) =>
+                    qty + (event.action === "open" ? event.quantity : -event.quantity),
+                  0,
+                );
+              return shares + quantity * leg.multiplier;
+            }, 0);
+          if ((balances.get(stock.id) ?? 0) < covered)
+            throw new Error("Covered calls exceed stock balance");
+        }
+      }
       return closedOn;
     });
   }
@@ -80,8 +128,36 @@ export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
               legs.map((leg) => leg.id),
             ),
           );
+        const coveredLegId = legs.find((leg) => leg.coveredLegId !== null)?.coveredLegId;
+        const assignedFills = coveredLegId
+          ? await db
+              .select({
+                price: s.trades.price,
+                quantity: s.trades.quantity,
+                premium: s.assignments.premiumPerShare,
+              })
+              .from(s.trades)
+              .innerJoin(s.assignments, eq(s.assignments.stockTradeId, s.trades.id))
+              .where(eq(s.trades.legId, coveredLegId))
+          : [];
+        if (coveredLegId && assignedFills.length === 0)
+          throw new Error("Covered stock leg has no assignment");
+        const coveredStock = coveredLegId
+          ? {
+              legId: coveredLegId,
+              basis: divMoney4(
+                sumMoney4(
+                  assignedFills.map((fill) =>
+                    mulMoney4(assignedShareBasis(fill.price, fill.premium), fill.quantity),
+                  ),
+                ),
+                assignedFills.reduce((sum, fill) => sum + fill.quantity, 0),
+              ),
+            }
+          : null;
         return {
           ...position,
+          coveredStock,
           legs: legs.map((leg) => ({
             ...leg,
             trades: trades.filter((event) => event.legId === leg.id),

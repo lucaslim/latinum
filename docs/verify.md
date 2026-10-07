@@ -6,7 +6,10 @@
 `e2e` is also the launch-and-drive step. Playwright starts the local API
 (`src/api/server.ts`, an in-memory PGlite seeded with the prototype book, on
 port 8788) and `vite preview` (port 4173, proxying `/api`), drives the real app,
-and stops both. It reuses servers already listening on those ports when not in CI.
+and stops both.
+It starts fresh servers on every run and serializes specs because they share one in-memory book.
+The trade-form spec resets that book before and after each test through a local-only endpoint
+enabled by `E2E_MODE=1`; that endpoint is not mounted in the deployed app.
 Do not start your own servers for it.
 
 Evidence lands in `.verify/` (gitignored): full-page screenshots of the Sheet at
@@ -21,6 +24,9 @@ Evidence lands in `.verify/` (gitignored): full-page screenshots of the Sheet at
 | Hedge markers | `e2e/sheet.spec.ts` | The NVDA spread row shows `max`, `risk` and `RoR` |
 | Filters | `e2e/sheet.spec.ts` | Hedges leaves 4 contracts in the footer, 77 in the KPI strip |
 | Footer strings | `src/web/components/PositionsSheet.test.tsx` | Discord, Covered, CSP and prototype fixtures print their plan totals |
+| Add/edit trade | `e2e/trade-form.spec.ts` | All ten strategy chips, fees and seven holiday-adjusted expiry choices; DRAM live metrics, saved row, edited fill and footer without a document reload at 1400 px and 390 px |
+| Trade math and suggestions | `src/shared/tradeForm.test.ts`, `src/shared/symbols.test.ts`, `src/domain/expiry.test.ts` | T3 metrics, assigned share-basis prefill, user tickers first, tags, monthly and holiday chips |
+| Atomic trade writes | `src/api/trades.test.ts`, `src/db/tradeRepository.test.ts` | Invalid-body 400, late-write rollback, manual-fill edits and assigned CCs without duplicate stock fills |
 | Token contract | `src/web/theme/theme.contract.test.ts` | Every theme block has the full token set; no colour literals outside `tokens.css` |
 
 Add a row here when a task adds a screen.

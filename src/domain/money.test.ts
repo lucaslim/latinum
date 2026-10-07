@@ -40,6 +40,9 @@ describe("parseMoney4 range", () => {
 });
 
 describe("formatMoney4", () => {
+  it("round-trips the largest safe Money4 integer without a floating intermediate", () => {
+    expect(formatMoney4(parseMoney4("900719925474.0991"))).toBe("900719925474.0991");
+  });
   it("formats at four decimals by default", () => {
     expect(formatMoney4(m("218"))).toBe("218.0000");
     expect(formatMoney4(m("-0.6527"))).toBe("-0.6527");
@@ -61,6 +64,14 @@ describe("formatMoney4", () => {
 });
 
 describe("arithmetic", () => {
+  it("rejects unsafe results even when each input is a valid Money4 value", () => {
+    const max = parseMoney4("900719925474.0991");
+    const unit = parseMoney4("0.0001");
+    expect(() => addMoney4(max, unit)).toThrow("Money4 precision");
+    expect(() => subMoney4(negMoney4(max), unit)).toThrow("Money4 precision");
+    expect(() => mulMoney4(max, 2)).toThrow("Money4 precision");
+    expect(() => sumMoney4([max, unit])).toThrow("Money4 precision");
+  });
   it("float guard: 1.09 x 100 x 2 sums to exactly 218.0000", () => {
     // the prototype's float math gives 218.00000000000003
     const debit = mulMoney4(mulMoney4(m("1.09"), 100), 2);

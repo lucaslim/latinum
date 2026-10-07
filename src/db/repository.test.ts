@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { parseMoney4 as m } from "../domain/money.ts";
+import { createPositionSchema } from "../shared/trade.ts";
+import { toBookPositions } from "./book.ts";
 import { repository } from "./repository.ts";
 import * as s from "./schema.ts";
+import { assignmentFixture } from "./test/assignment.ts";
 import { testDatabase } from "./test/database.ts";
+import { tradeRepository } from "./tradeRepository.ts";
 
 let database: Awaited<ReturnType<typeof testDatabase>>;
 beforeAll(async () => {
@@ -109,6 +113,193 @@ test("invalid event batches roll back trades and position state", async () => {
   );
   await expect(repo.appendTrades(randomUUID(), [])).rejects.toThrow("not found");
 });
+describe("assigned covered stock closes", () => {
+  let isolated: Awaited<ReturnType<typeof testDatabase>>;
+  let ids: Awaited<ReturnType<typeof assignmentFixture>>;
+  let callPositionId: string;
+  let callLegId: string;
+  beforeEach(async () => {
+    isolated = await testDatabase();
+    ids = await assignmentFixture(isolated.db);
+    const call = await tradeRepository(isolated.db).create(
+      createPositionSchema.parse({
+        strategy: "cc",
+        underlying: "DRAM",
+        openedOn: "2026-09-25",
+        expiry: "2026-10-09",
+        quantity: 10,
+        adjusted: false,
+        strike: "55",
+        price: "1.10",
+        fees: "6.50",
+        tags: ["wheel"],
+        cover: { kind: "assigned", stockLegId: ids.stockLegId },
+      }),
+    );
+    callPositionId = call.positionId;
+    const [leg] = await isolated.db
+      .select()
+      .from(s.legs)
+      .where(eq(s.legs.positionId, callPositionId));
+    assert(leg);
+    callLegId = leg.id;
+  });
+  afterEach(async () => {
+    await isolated.client.close();
+  });
+
+  test.each([
+    { quantity: 600, cash: m("33000") },
+    { quantity: 1500, cash: m("82500") },
+  ])(
+    "rejects a $quantity-share close atomically and preserves a readable covered book",
+    async ({ quantity, cash }) => {
+      const repo = repository(isolated.db);
+      const before = await repo.readOpenBook();
+      expect(toBookPositions(before)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: ids.stockPositionId, shares: 500, price: 550000 }),
+          expect.objectContaining({ id: callPositionId, strategy: "cc", qty: 10, basis: 530000 }),
+        ]),
+      );
+      const trades = await isolated.db
+        .select()
+        .from(s.trades)
+        .where(eq(s.trades.legId, ids.stockLegId));
+      const positions = await isolated.db.select().from(s.positions);
+      await expect(
+        repo.appendTrades(ids.stockPositionId, [
+          {
+            legId: ids.stockLegId,
+            action: "close",
+            tradeDate: "2026-10-01",
+            quantity,
+            price: m("55"),
+            cash,
+          },
+        ]),
+      ).rejects.toThrow("Covered calls exceed stock balance");
+      expect(
+        await isolated.db.select().from(s.trades).where(eq(s.trades.legId, ids.stockLegId)),
+      ).toEqual(trades);
+      expect(await isolated.db.select().from(s.positions)).toEqual(positions);
+      expect(await repo.readOpenBook()).toEqual(before);
+      expect(toBookPositions(await repo.readOpenBook())).toEqual(toBookPositions(before));
+    },
+  );
+
+  test.each(["multiple calls", "adjusted multiplier"])(
+    "reserves all referenced shares with %s",
+    async (coverage) => {
+      if (coverage === "multiple calls") {
+        await tradeRepository(isolated.db).create(
+          createPositionSchema.parse({
+            strategy: "cc",
+            underlying: "DRAM",
+            openedOn: "2026-09-25",
+            expiry: "2026-10-09",
+            quantity: 5,
+            adjusted: false,
+            strike: "55",
+            price: "1.10",
+            fees: "3.25",
+            tags: ["wheel"],
+            cover: { kind: "assigned", stockLegId: ids.stockLegId },
+          }),
+        );
+      } else {
+        await isolated.db
+          .update(s.legs)
+          .set({ multiplier: 150, adjusted: true })
+          .where(eq(s.legs.id, callLegId));
+      }
+      await expect(
+        repository(isolated.db).appendTrades(ids.stockPositionId, [
+          {
+            legId: ids.stockLegId,
+            action: "close",
+            tradeDate: "2026-10-01",
+            quantity: 1,
+            price: m("55"),
+            cash: m("55"),
+          },
+        ]),
+      ).rejects.toThrow("Covered calls exceed stock balance");
+      expect(
+        await isolated.db.select().from(s.trades).where(eq(s.trades.legId, ids.stockLegId)),
+      ).toMatchObject([{ id: ids.stockTradeId, action: "open", quantity: 1500 }]);
+      expect(
+        await isolated.db.select().from(s.trades).where(eq(s.trades.legId, ids.stockLegId)),
+      ).toHaveLength(1);
+    },
+  );
+
+  test("allows closing the 500 uncovered shares without changing CC valuation", async () => {
+    const repo = repository(isolated.db);
+    expect(
+      await repo.appendTrades(ids.stockPositionId, [
+        {
+          legId: ids.stockLegId,
+          action: "close",
+          tradeDate: "2026-10-01",
+          quantity: 500,
+          price: m("55"),
+          cash: m("27500"),
+        },
+      ]),
+    ).toBeNull();
+    const rows = await repo.readOpenBook();
+    expect(rows.find((row) => row.id === ids.stockPositionId)).toMatchObject({ closedOn: null });
+    expect(toBookPositions(rows)).toMatchObject([
+      { id: callPositionId, strategy: "cc", qty: 10, basis: 530000, price: 11000 },
+    ]);
+    expect(toBookPositions(rows)).toHaveLength(1);
+    expect((await tradeRepository(isolated.db).options()).assignedStock).toEqual([]);
+  });
+
+  test("call reductions release coverage and fully closed calls no longer reserve shares", async () => {
+    const repo = repository(isolated.db);
+    expect(await repo.appendTrades(callPositionId, [close(callLegId, 5, "2026-10-01")])).toBeNull();
+    expect(
+      await repo.appendTrades(ids.stockPositionId, [
+        {
+          legId: ids.stockLegId,
+          action: "close",
+          tradeDate: "2026-10-01",
+          quantity: 1000,
+          price: m("55"),
+          cash: m("55000"),
+        },
+      ]),
+    ).toBeNull();
+    expect(toBookPositions(await repo.readOpenBook())).toMatchObject([
+      { id: callPositionId, strategy: "cc", qty: 5, basis: 530000 },
+    ]);
+    expect(await repo.appendTrades(callPositionId, [close(callLegId, 5, "2026-10-02")])).toBe(
+      "2026-10-02",
+    );
+    expect(
+      await repo.appendTrades(ids.stockPositionId, [
+        {
+          legId: ids.stockLegId,
+          action: "close",
+          tradeDate: "2026-10-02",
+          quantity: 500,
+          price: m("55"),
+          cash: m("27500"),
+        },
+      ]),
+    ).toBe("2026-10-02");
+    expect(await repo.readOpenBook()).toEqual([]);
+    expect(
+      await isolated.db
+        .select({ id: s.positions.id, closedOn: s.positions.closedOn })
+        .from(s.positions)
+        .where(eq(s.positions.id, ids.stockPositionId)),
+    ).toEqual([{ id: ids.stockPositionId, closedOn: "2026-10-02" }]);
+  });
+});
+
 test("money round trips signed fees and positive prices/strikes exactly", async () => {
   const { repo, accountId } = await position();
   const [loaded] = await repo.readOpenPositions(accountId);

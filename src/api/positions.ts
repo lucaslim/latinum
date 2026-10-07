@@ -1,9 +1,10 @@
 import type { Handler } from "hono";
-import { toBookPosition } from "../db/book.ts";
+import { toBookPositions } from "../db/book.ts";
 import type { WithDb } from "../db/database.ts";
 import { repository } from "../db/repository.ts";
 import { todayNY } from "../domain/dates.ts";
 import type { OpenPositionsResponse } from "../domain/sheet.ts";
+import { bookTotals } from "../domain/totals.ts";
 
 export interface PositionsDeps {
   withDb: WithDb;
@@ -17,12 +18,9 @@ export function positionsRoute({ withDb, now }: PositionsDeps): Handler {
     const rows = await withDb((db) => repository(db).readOpenBook());
     const body: OpenPositionsResponse = {
       asOf: todayNY(now()),
-      positions: rows.map((row) => ({
-        id: row.id,
-        campaignId: row.campaignId,
-        ...toBookPosition(row),
-      })),
+      positions: toBookPositions(rows),
     };
+    bookTotals(body.positions);
     c.header("Cache-Control", "private, no-store");
     return c.json(body);
   };

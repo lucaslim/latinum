@@ -110,10 +110,12 @@ export function PositionsSheet({
   positions,
   asOf,
   initialFilter = "all",
+  onEdit,
 }: {
   positions: readonly OpenPosition[];
   asOf: IsoDate;
   initialFilter?: SheetFilter;
+  onEdit?: (positionId: string) => void;
 }) {
   const [filter, setFilter] = useState<SheetFilter>(initialFilter);
   const visible = sortByExpiry(filterPositions(positions, filter));
@@ -165,6 +167,19 @@ export function PositionsSheet({
               <tr key={r.id} className={r.tint ? `row ${r.tint}` : "row"}>
                 <td className="tk">
                   <a href={`#/campaigns/${r.campaignId}`}>{r.ticker}</a>
+                  {onEdit && (
+                    <>
+                      {" "}
+                      <button
+                        type="button"
+                        className="edit-trade"
+                        aria-label={`Edit ${r.ticker} trade`}
+                        onClick={() => onEdit(r.id)}
+                      >
+                        Edit
+                      </button>
+                    </>
+                  )}
                 </td>
                 <td className="num">{r.strike}</td>
                 <td>
@@ -203,6 +218,18 @@ export function PositionsSheet({
           <article key={r.id} className={r.tint ? `card ${r.tint}` : "card"}>
             <div className="l1">
               <a href={`#/campaigns/${r.campaignId}`}>{r.ticker}</a>{" "}
+              {onEdit && (
+                <>
+                  <button
+                    type="button"
+                    className="edit-trade"
+                    aria-label={`Edit ${r.ticker} trade`}
+                    onClick={() => onEdit(r.id)}
+                  >
+                    Edit
+                  </button>{" "}
+                </>
+              )}
               <span className="num">{r.strike}</span> <Value cell={r.type} />{" "}
               <span className="tone-muted">{r.side}</span>
             </div>

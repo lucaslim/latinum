@@ -12,7 +12,7 @@ test("real migrations grant DML but deny app DDL and migration-log access", asyn
     try {
       await migrate(drizzle(owner), { migrationsFolder: "drizzle" });
       expect((await owner.query("SELECT * FROM drizzle.__drizzle_migrations")).rows).toHaveLength(
-        2,
+        3,
       );
       await owner.exec("ALTER ROLE app_rw PASSWORD 'local-test-only'");
       expect(

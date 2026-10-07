@@ -5,6 +5,12 @@ import { heartbeatRoute } from "./cron.ts";
 import { exportRoute } from "./export.ts";
 import { neonHeartbeatWriter } from "./heartbeat.ts";
 import { type PositionsDeps, positionsRoute } from "./positions.ts";
+import {
+  createPositionRoute,
+  manualTradesRoute,
+  patchTradeRoute,
+  tradeFormOptionsRoute,
+} from "./trades.ts";
 
 export function createApp(deps: PositionsDeps) {
   const app = new Hono().basePath("/api");
@@ -15,6 +21,10 @@ export function createApp(deps: PositionsDeps) {
   app.get("/campaigns/:id", campaignRoute(deps));
   app.put("/legs/:id/mark", manualMarkRoute(deps));
   app.get("/export", exportRoute(deps));
+  app.post("/positions", createPositionRoute(deps));
+  app.patch("/trades/:id", patchTradeRoute(deps));
+  app.get("/trade-form/options", tradeFormOptionsRoute(deps));
+  app.get("/positions/:id/manual-trades", manualTradesRoute(deps));
   return app;
 }
 

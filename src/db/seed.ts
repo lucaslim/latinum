@@ -42,16 +42,16 @@ export async function seedBook<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>
         strike: NewLeg["strike"] = null,
       ): NewLeg {
         const stock = kind === "stock";
-        const quantity = p.strategy === "stock" ? p.shares : stock ? p.qty * 100 : p.qty;
+        const quantity = "shares" in p ? p.shares : stock ? p.qty * 100 : p.qty;
         const cash = mulMoney4(price, quantity * (stock ? 1 : 100));
         return {
           kind,
           side,
           underlying: p.underlying,
           strike,
-          expiry: stock || p.strategy === "stock" ? null : p.expiry,
+          expiry: stock || "shares" in p ? null : p.expiry,
           multiplier: stock ? 1 : 100,
-          adjusted: p.strategy === "stock" ? false : p.adjusted,
+          adjusted: "shares" in p ? false : p.adjusted,
           trades: [
             {
               action: "open",
