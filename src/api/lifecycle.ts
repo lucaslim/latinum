@@ -12,6 +12,7 @@ import {
   LifecycleConflictError,
   LifecycleValidationError,
   lifecycleRepository,
+  StalePositionRevisionError,
 } from "../db/lifecycle.ts";
 import { CoveredStockConflictError } from "../db/repository.ts";
 import { todayNY } from "../domain/dates.ts";
@@ -65,6 +66,8 @@ export function lifecycleRoute(action: LifecycleAction, { withDb, now }: Positio
       const result = await withDb(perform);
       return result ? c.json(result) : c.json({ error: "Position or campaign not found" }, 404);
     } catch (error) {
+      if (error instanceof StalePositionRevisionError)
+        return c.json({ error: error.message, code: "stale_revision" }, 409);
       if (error instanceof LifecycleValidationError) return c.json({ error: error.message }, 400);
       if (error instanceof LifecycleConflictError || error instanceof CoveredStockConflictError)
         return c.json({ error: error.message }, 409);

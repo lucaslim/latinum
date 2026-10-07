@@ -194,6 +194,26 @@ test("reads complete history, assignment and a deterministic manual-priority mar
   expect(old?.positions[2]?.legs[0]?.mark).toBeNull();
 });
 
+test("repeat campaign reads and asOf changes retain every position revision", async () => {
+  const repo = campaignRepository(database.db);
+  const first = await repo.readCampaign(campaignId, asOf);
+  assert(first);
+  for (const position of first.positions) expect(position.revision).toMatch(/^[0-9a-f]{64}$/);
+  const revisions = first.positions.map((position) => [position.id, position.revision]);
+  expect(
+    (await repo.readCampaign(campaignId, asOf))?.positions.map((position) => [
+      position.id,
+      position.revision,
+    ]),
+  ).toEqual(revisions);
+  expect(
+    (await repo.readCampaign(campaignId, d("2026-10-02")))?.positions.map((position) => [
+      position.id,
+      position.revision,
+    ]),
+  ).toEqual(revisions);
+});
+
 test("orders legs by id and same-day trades by createdAt then id", async () => {
   const { db } = database;
   await db.insert(s.legs).values([
@@ -258,6 +278,11 @@ test("includes assignments when only the stock or only the option side belongs t
 
 test("upserts manual marks losslessly without replacing feed marks", async () => {
   const repo = campaignRepository(database.db);
+  const before = (await repo.readCampaign(campaignId, asOf))?.positions.map((position) => [
+    position.id,
+    position.revision,
+  ]);
+  assert(before);
   expect(
     await repo.saveManualMark(swingLegId, { asOf, price: m("5.1001"), source: "manual" }),
   ).toEqual({ legId: swingLegId, asOf, price: 51001, source: "manual" });
@@ -275,6 +300,12 @@ test("upserts manual marks losslessly without replacing feed marks", async () =>
     { legId: swingLegId, asOf: "2026-10-01", price: 52000, source: "manual" },
     { legId: swingLegId, asOf: "2026-10-02", price: 60000, source: "feed" },
   ]);
+  expect(
+    (await repo.readCampaign(campaignId, asOf))?.positions.map((position) => [
+      position.id,
+      position.revision,
+    ]),
+  ).toEqual(before);
 });
 
 test("unknown campaign/leg is absent and ineligible marks leave no rows", async () => {

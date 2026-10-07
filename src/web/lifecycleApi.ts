@@ -20,10 +20,16 @@ export type SaveLifecycle = (
 
 export class LifecycleHttpError extends Error {
   readonly status: number;
+  readonly code: "stale_revision" | undefined;
 
-  constructor(status: number, detail: string, options?: ErrorOptions) {
+  constructor(
+    status: number,
+    detail: string,
+    options?: ErrorOptions & { code?: "stale_revision" },
+  ) {
     super(`${detail} (HTTP ${status})`, options);
     this.status = status;
+    this.code = options?.code;
   }
 }
 
@@ -56,7 +62,11 @@ export async function saveLifecycle(
       typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
         ? body.error
         : fallback;
-    throw new LifecycleHttpError(response.status, detail);
+    const code =
+      typeof body === "object" && body !== null && "code" in body && body.code === "stale_revision"
+        ? body.code
+        : undefined;
+    throw new LifecycleHttpError(response.status, detail, code ? { code } : undefined);
   }
   return response.json();
 }

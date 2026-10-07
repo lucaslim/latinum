@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { CampaignMark, CampaignResponse, ManualMarkResponse } from "../domain/campaign.ts";
 import { type IsoDate, parseIsoDate } from "../domain/dates.ts";
 import type { Database } from "./database.ts";
+import { positionRevision } from "./positionRevision.ts";
 import * as s from "./schema.ts";
 
 export class ManualMarkConflictError extends Error {
@@ -77,6 +78,13 @@ export function campaignRepository(db: Database) {
           assignments,
           positions: positions.map((position) => ({
             id: position.id,
+            revision: positionRevision(
+              position,
+              legs.filter((leg) => leg.positionId === position.id),
+              trades.filter((trade) =>
+                legs.some((leg) => leg.positionId === position.id && leg.id === trade.legId),
+              ),
+            ),
             underlying: position.underlying,
             strategy: position.strategy,
             role: position.role,

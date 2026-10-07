@@ -7,28 +7,35 @@ import type { Money4 } from "../domain/money.ts";
 
 /** Decimal USD strings at the HTTP boundary; fees are zero or negative. */
 export interface CloseRequest {
+  expectedRevision: string;
   tradeDate?: string;
   fills: { legId: string; quantity: number; price: string; fees?: string }[];
 }
 export interface ExpireRequest {
+  expectedRevision: string;
   tradeDate?: string;
 }
 export interface AssignRequest {
+  expectedRevision: string;
   legId: string;
   tradeDate?: string;
   fees?: string;
 }
 export interface LinkHedgeRequest {
+  expectedRevision: string;
   campaignId: string;
 }
 export interface CloseInput {
+  expectedRevision: string;
   tradeDate: IsoDate;
   fills: { legId: string; quantity: number; price: Money4; fees: Money4 }[];
 }
 export interface ExpireInput {
+  expectedRevision: string;
   tradeDate: IsoDate;
 }
 export interface AssignInput {
+  expectedRevision: string;
   legId: string;
   tradeDate: IsoDate;
   fees: Money4;

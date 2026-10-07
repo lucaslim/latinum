@@ -1,4 +1,16 @@
+import { isValidElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nvdlCampaign } from "../../domain/test/campaignFixtures.ts";
+import { LifecycleActions } from "./LifecycleActions.tsx";
+
+const state = vi.hoisted(() => ({ values: [] as unknown[] }));
+vi.mock("react", async (original) => ({
+  ...(await original<typeof import("react")>()),
+  useState: () => [state.values.shift(), vi.fn()],
+  useRef: (initial: unknown) => ({ current: initial }),
+  useEffect: vi.fn(),
+}));
+
 import { type LifecycleMutation, saveLifecycle } from "../lifecycleApi.ts";
 
 afterEach(() => {
@@ -10,13 +22,14 @@ describe("Lifecycle transport", () => {
     {
       action: "close",
       input: {
+        expectedRevision: "R0",
         fills: [{ legId: "spxl-leg", quantity: 2, price: "0.4000", fees: "-1.30" }],
         tradeDate: "2026-10-16",
       },
     },
-    { action: "expire", input: {} },
-    { action: "assign", input: { legId: "dram-leg" } },
-    { action: "link-hedge", input: { campaignId: "target" } },
+    { action: "expire", input: { expectedRevision: "R0" } },
+    { action: "assign", input: { expectedRevision: "R0", legId: "dram-leg" } },
+    { action: "link-hedge", input: { expectedRevision: "R0", campaignId: "target" } },
   ];
   for (const mutation of mutations) {
     it(`POSTs ${mutation.action} exactly once as private uncached JSON`, async () => {
@@ -53,7 +66,11 @@ describe("Lifecycle transport", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     await expect(
-      saveLifecycle("position", { action: "expire", input: {} }, new AbortController().signal),
+      saveLifecycle(
+        "position",
+        { action: "expire", input: { expectedRevision: "R0" } },
+        new AbortController().signal,
+      ),
     ).rejects.toThrow("Position is already closed (HTTP 409)");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -68,7 +85,11 @@ describe("Lifecycle transport", () => {
       );
       vi.stubGlobal("fetch", fetchMock);
       await expect(
-        saveLifecycle("position", { action: "expire", input: {} }, new AbortController().signal),
+        saveLifecycle(
+          "position",
+          { action: "expire", input: { expectedRevision: "R0" } },
+          new AbortController().signal,
+        ),
       ).rejects.toMatchObject({
         message: "Could not save lifecycle action (HTTP 502)",
         status: 502,
@@ -88,7 +109,11 @@ describe("Lifecycle transport", () => {
       );
       vi.stubGlobal("fetch", fetchMock);
       await expect(
-        saveLifecycle("position", { action: "expire", input: {} }, new AbortController().signal),
+        saveLifecycle(
+          "position",
+          { action: "expire", input: { expectedRevision: "R0" } },
+          new AbortController().signal,
+        ),
       ).rejects.toThrow("Could not save lifecycle action (HTTP 409)");
       expect(fetchMock).toHaveBeenCalledTimes(1);
     },
@@ -102,7 +127,11 @@ describe("Lifecycle transport", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     await expect(
-      saveLifecycle("position", { action: "expire", input: {} }, new AbortController().signal),
+      saveLifecycle(
+        "position",
+        { action: "expire", input: { expectedRevision: "R0" } },
+        new AbortController().signal,
+      ),
     ).rejects.toThrow("Could not save lifecycle action (HTTP 502)");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -110,8 +139,101 @@ describe("Lifecycle transport", () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("Connection lost"));
     vi.stubGlobal("fetch", fetchMock);
     await expect(
-      saveLifecycle("position", { action: "expire", input: {} }, new AbortController().signal),
+      saveLifecycle(
+        "position",
+        { action: "expire", input: { expectedRevision: "R0" } },
+        new AbortController().signal,
+      ),
     ).rejects.toThrow("Connection lost");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Lifecycle revisions", () => {
+  function findSubmit(node: ReactNode): ((event: unknown) => Promise<void>) | undefined {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        const submit = findSubmit(child);
+        if (submit) return submit;
+      }
+    } else if (
+      isValidElement<{ children?: ReactNode; onSubmit?: (event: unknown) => Promise<void> }>(node)
+    ) {
+      if (node.type === "form") return node.props.onSubmit;
+      return findSubmit(node.props.children);
+    }
+    return undefined;
+  }
+
+  it.each(["close", "expire", "assign", "link-hedge"] as const)(
+    "%s builds its request from the displayed position revision",
+    async (action) => {
+      const fixture = nvdlCampaign.positions[action === "link-hedge" ? 2 : 0];
+      if (!fixture) throw new Error("Missing lifecycle fixture position");
+      const position = { ...fixture, revision: "R0" };
+      const legId = position.legs[0]?.id;
+      if (!legId) throw new Error("Missing lifecycle fixture leg");
+      state.values = [{ action, legId }, [legId], false, null];
+      const fields = new Map([
+        ["tradeDate", "2026-10-16"],
+        ["fees", "0"],
+        ["campaignId", "target"],
+        [`quantity-${legId}`, "5"],
+        [`price-${legId}`, "0.40"],
+        [`fees-${legId}`, "-1.30"],
+      ]);
+      vi.stubGlobal(
+        "FormData",
+        class {
+          get(name: string) {
+            return fields.get(name);
+          }
+        },
+      );
+      const onSave = vi.fn().mockResolvedValue({});
+      const submit = findSubmit(LifecycleActions({ position, onSave }));
+      if (!submit) throw new Error("Lifecycle form was not rendered");
+      await submit({ preventDefault: vi.fn(), currentTarget: {} });
+      const input =
+        action === "close"
+          ? {
+              expectedRevision: "R0",
+              tradeDate: "2026-10-16",
+              fills: [{ legId, quantity: 5, price: "0.40", fees: "-1.30" }],
+            }
+          : action === "expire"
+            ? { expectedRevision: "R0", tradeDate: "2026-10-16" }
+            : action === "assign"
+              ? { expectedRevision: "R0", tradeDate: "2026-10-16", legId, fees: "0" }
+              : { expectedRevision: "R0", campaignId: "target" };
+      expect(onSave).toHaveBeenCalledExactlyOnceWith(position.id, { action, input });
+    },
+  );
+
+  it.each([
+    ["stale_revision", "stale_revision"],
+    ["another_code", undefined],
+    [123, undefined],
+    [null, undefined],
+    [{ value: "stale_revision" }, undefined],
+    [undefined, undefined],
+  ])("only recognizes the known string code %j", async (code, expectedCode) => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(Response.json({ error: "Position changed", code }, { status: 409 })),
+    );
+    await expect(
+      saveLifecycle(
+        "position",
+        { action: "expire", input: { expectedRevision: "R0" } },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: expectedCode,
+      message: "Position changed (HTTP 409)",
+    });
   });
 });

@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
-import type { CloseInput } from "../contracts/lifecycle.ts";
+import type {
+  AssignInput,
+  CloseInput,
+  ExpireInput,
+  LinkHedgeRequest,
+} from "../contracts/lifecycle.ts";
 import { parseIsoDate as d } from "../domain/dates.ts";
 import { parseMoney4 as m } from "../domain/money.ts";
 import { campaignRepository } from "./campaigns.ts";
@@ -121,11 +126,43 @@ async function position(legs: NewLeg[] = [muu], fields: Partial<NewPosition> = {
   assert(first);
   return { id, legs: loaded, legId: first.id, campaignId: source.id };
 }
-const repo = () => lifecycleRepository(database.db);
+async function expectedRevision(id: string) {
+  const [row] = await database.db.select().from(s.positions).where(eq(s.positions.id, id));
+  if (!row) return "0".repeat(64);
+  const campaign = await campaignRepository(database.db).readCampaign(
+    row.campaignId,
+    d("2026-10-16"),
+  );
+  const position = campaign?.positions.find((position) => position.id === id);
+  assert(position);
+  return position.revision;
+}
+type ObservedInput<T extends { expectedRevision: string }> = Omit<T, "expectedRevision"> &
+  Partial<Pick<T, "expectedRevision">>;
+const repo = () => {
+  const repository = lifecycleRepository(database.db);
+  const observe = async <T extends { expectedRevision: string }>(
+    id: string,
+    input: ObservedInput<T>,
+  ) => ({
+    ...input,
+    expectedRevision: input.expectedRevision ?? (await expectedRevision(id)),
+  });
+  return {
+    closePosition: async (id: string, input: ObservedInput<CloseInput>) =>
+      repository.closePosition(id, await observe<CloseInput>(id, input)),
+    expirePosition: async (id: string, input: ObservedInput<ExpireInput>) =>
+      repository.expirePosition(id, await observe<ExpireInput>(id, input)),
+    assignPosition: async (id: string, input: ObservedInput<AssignInput>) =>
+      repository.assignPosition(id, await observe<AssignInput>(id, input)),
+    linkHedge: async (id: string, input: ObservedInput<LinkHedgeRequest>) =>
+      repository.linkHedge(id, await observe<LinkHedgeRequest>(id, input)),
+  };
+};
 const close = (
   legId: string,
   quantity = 5,
-): CloseInput & { fills: [CloseInput["fills"][number]] } => ({
+): ObservedInput<CloseInput> & { fills: [CloseInput["fills"][number]] } => ({
   tradeDate: d("2026-10-01"),
   fills: [{ legId, quantity, price: m("0.40"), fees: m("-1.30") }],
 });
@@ -139,6 +176,46 @@ async function rows() {
     campaigns: await db.select().from(s.campaigns).orderBy(s.campaigns.id),
   };
 }
+
+test("duplicate partial5/10 with the same observed revision cannot close the remaining5", async () => {
+  const p = await position();
+  const input = { ...close(p.legId), expectedRevision: await expectedRevision(p.id) };
+  const first = await repo().closePosition(p.id, input);
+  expect(first?.closedOn).toBeNull();
+  const saved = await rows();
+  await expect(repo().closePosition(p.id, input)).rejects.toMatchObject({
+    status: 409,
+    message: "Position changed. Reload the campaign before another action.",
+  });
+  expect(await rows()).toEqual(saved);
+  const open = await repository(database.db).readOpenPositions(accountId);
+  expect(open[0]?.legs[0]?.trades.map((trade) => [trade.action, trade.quantity])).toEqual([
+    ["open", 10],
+    ["close", 5],
+  ]);
+});
+
+test("stale revision precedes allocation validation of a changed trade history", async () => {
+  const p = await position();
+  const observed = await expectedRevision(p.id);
+  await database.db.insert(s.trades).values({
+    legId: p.legId,
+    action: "close",
+    tradeDate: "2026-10-01",
+    quantity: 11,
+    price: m("0.40"),
+    cash: m("-440"),
+    fees: m("0"),
+  });
+  const saved = await rows();
+  await expect(
+    repo().closePosition(p.id, { ...close(p.legId), expectedRevision: observed }),
+  ).rejects.toMatchObject({
+    status: 409,
+    message: "Position changed. Reload the campaign before another action.",
+  });
+  expect(await rows()).toEqual(saved);
+});
 
 test("MUU expiration books 1493.40 once and persists a zero-price/cash/fee event", async () => {
   const p = await position();
@@ -170,9 +247,10 @@ test("MUU expiration books 1493.40 once and persists a zero-price/cash/fee event
     source: "manual",
   });
   expect(saved.positions[0]?.closedOn).toBe("2026-10-16");
-  await expect(repo().expirePosition(p.id, { tradeDate: d("2026-10-16") })).rejects.toThrow(
-    LifecycleConflictError,
-  );
+  await expect(repo().expirePosition(p.id, { tradeDate: d("2026-10-16") })).rejects.toMatchObject({
+    status: 409,
+    message: "Position has no open quantity",
+  });
   expect(await rows()).toEqual(saved);
 });
 
@@ -838,6 +916,7 @@ test("link forbids income, closed hedge, roll chain and rolled trade", async () 
 
 test("single-account boundary rejects lifecycle and cross-account linking without writes", async () => {
   const p = await position([muu], { role: "hedge" });
+  const observed = await expectedRevision(p.id);
   const [other] = await database.db
     .insert(s.accounts)
     .values({ label: "Other", broker: "manual" })
@@ -845,13 +924,22 @@ test("single-account boundary rejects lifecycle and cross-account linking withou
   assert(other);
   const target = await campaign("2026-09-01", other.id);
   const before = await rows();
-  await expect(repo().closePosition(p.id, close(p.legId))).rejects.toThrow("single account");
-  await expect(repo().expirePosition(p.id, { tradeDate: d("2026-10-16") })).rejects.toThrow(
-    "single account",
-  );
   await expect(
-    repo().assignPosition(p.id, { legId: p.legId, tradeDate: d("2026-10-16"), fees: m("0") }),
+    repo().closePosition(p.id, { ...close(p.legId), expectedRevision: observed }),
   ).rejects.toThrow("single account");
-  await expect(repo().linkHedge(p.id, { campaignId: target.id })).rejects.toThrow("account");
+  await expect(
+    repo().expirePosition(p.id, { tradeDate: d("2026-10-16"), expectedRevision: observed }),
+  ).rejects.toThrow("single account");
+  await expect(
+    repo().assignPosition(p.id, {
+      legId: p.legId,
+      tradeDate: d("2026-10-16"),
+      fees: m("0"),
+      expectedRevision: observed,
+    }),
+  ).rejects.toThrow("single account");
+  await expect(
+    repo().linkHedge(p.id, { campaignId: target.id, expectedRevision: observed }),
+  ).rejects.toThrow("account");
   expect(await rows()).toEqual(before);
 });

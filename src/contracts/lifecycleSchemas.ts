@@ -20,6 +20,11 @@ function uuid(value: unknown): string {
   if (typeof value !== "string" || !isUuid(value)) throw new RangeError("Expected UUID");
   return value.toLowerCase();
 }
+function revision(value: unknown): string {
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value))
+    throw new RangeError("Expected lowercase SHA-256 position revision");
+  return value;
+}
 function tradeDate(value: unknown, today: IsoDate): IsoDate {
   if (value === undefined) return today;
   if (typeof value !== "string") throw new RangeError("Expected tradeDate string");
@@ -44,7 +49,7 @@ function amount(value: unknown, fees = false): Money4 {
 /** Shared strict request schemas; return branded domain inputs, never float-parsed prices. */
 export const closeSchema = {
   parse(value: unknown, today: IsoDate): CloseInput {
-    const body = record(value, ["fills", "tradeDate"]);
+    const body = record(value, ["fills", "tradeDate", "expectedRevision"]);
     if (!Array.isArray(body.fills) || body.fills.length === 0)
       throw new RangeError("Expected nonempty per-leg fills");
     const fills = body.fills.map((value) => {
@@ -66,19 +71,27 @@ export const closeSchema = {
     });
     if (new Set(fills.map((fill) => fill.legId)).size !== fills.length)
       throw new RangeError("Duplicate leg fills");
-    return { tradeDate: tradeDate(body.tradeDate, today), fills };
+    return {
+      expectedRevision: revision(body.expectedRevision),
+      tradeDate: tradeDate(body.tradeDate, today),
+      fills,
+    };
   },
 };
 export const expireSchema = {
   parse(value: unknown, today: IsoDate): ExpireInput {
-    const body = record(value, ["tradeDate"]);
-    return { tradeDate: tradeDate(body.tradeDate, today) };
+    const body = record(value, ["tradeDate", "expectedRevision"]);
+    return {
+      expectedRevision: revision(body.expectedRevision),
+      tradeDate: tradeDate(body.tradeDate, today),
+    };
   },
 };
 export const assignSchema = {
   parse(value: unknown, today: IsoDate): AssignInput {
-    const body = record(value, ["legId", "tradeDate", "fees"]);
+    const body = record(value, ["legId", "tradeDate", "fees", "expectedRevision"]);
     return {
+      expectedRevision: revision(body.expectedRevision),
       legId: uuid(body.legId),
       tradeDate: tradeDate(body.tradeDate, today),
       fees: amount(body.fees, true),
@@ -87,7 +100,7 @@ export const assignSchema = {
 };
 export const linkHedgeSchema = {
   parse(value: unknown): LinkHedgeRequest {
-    const body = record(value, ["campaignId"]);
-    return { campaignId: uuid(body.campaignId) };
+    const body = record(value, ["campaignId", "expectedRevision"]);
+    return { expectedRevision: revision(body.expectedRevision), campaignId: uuid(body.campaignId) };
   },
 };

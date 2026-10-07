@@ -49,6 +49,7 @@ export default defineConfig({
         "src/shared/*.ts",
         "src/api/trades.ts",
         "src/db/lifecycle.ts",
+        "src/db/positionRevision.ts",
         "src/contracts/**/*.ts",
         "src/api/lifecycle.ts",
         "src/ops/*.ts",

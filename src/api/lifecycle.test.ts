@@ -74,7 +74,26 @@ async function put(
   });
   return { positionId, campaignId: campaign.id, legId };
 }
-const post = (id: string, action: string, body: unknown) =>
+async function expectedRevision(id: string) {
+  const [position] = await database.db.select().from(s.positions).where(eq(s.positions.id, id));
+  if (!position) return "0".repeat(64);
+  const read = await app.request(`/api/campaigns/${position.campaignId}`);
+  assert.equal(read.status, 200);
+  const campaign = (await read.json()) as CampaignResponse;
+  const observed = campaign.positions.find((position) => position.id === id.toLowerCase());
+  assert(observed);
+  return observed.revision;
+}
+async function post(id: string, action: string, body: unknown) {
+  return rawPost(
+    id,
+    action,
+    typeof body === "object" && body !== null && !Array.isArray(body)
+      ? { expectedRevision: await expectedRevision(id), ...body }
+      : body,
+  );
+}
+const rawPost = (id: string, action: string, body: unknown) =>
   app.request(`/api/positions/${id}/${action}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -98,10 +117,157 @@ test("MUU expiry books 1493.40 through HTTP; second expiry conflicts without dou
       bookedMonth: "2026-10",
     },
   ]);
-  expect((await post(fixture.positionId, "expire", {})).status).toBe(409);
+  const repeated = await post(fixture.positionId, "expire", {});
+  expect(repeated.status).toBe(409);
+  expect(await repeated.json()).toEqual({ error: "Position has no open quantity" });
   expect(
     await database.db.select().from(s.trades).where(eq(s.trades.legId, fixture.legId)),
   ).toHaveLength(2);
+});
+
+test("duplicate partial5/10 with R0 returns machine-readable409 and leaves5 open", async () => {
+  const fixture = await put();
+  const observed = await expectedRevision(fixture.positionId);
+  expect(observed).toMatch(/^[0-9a-f]{64}$/);
+  const input = {
+    expectedRevision: observed,
+    fills: [{ legId: fixture.legId, quantity: 5, price: "0.40", fees: "-1.30" }],
+  };
+  expect((await rawPost(fixture.positionId, "close", input)).status).toBe(200);
+  const before = await database.db.select().from(s.trades).where(eq(s.trades.legId, fixture.legId));
+  const duplicate = await rawPost(fixture.positionId, "close", input);
+  expect(duplicate.status).toBe(409);
+  expect(duplicate.headers.get("Cache-Control")).toBe("private, no-store");
+  expect(await duplicate.json()).toEqual({
+    error: "Position changed. Reload the campaign before another action.",
+    code: "stale_revision",
+  });
+  expect(
+    await database.db.select().from(s.trades).where(eq(s.trades.legId, fixture.legId)),
+  ).toEqual(before);
+  const read = await app.request(`/api/campaigns/${fixture.campaignId}`);
+  const campaign = (await read.json()) as CampaignResponse;
+  expect(campaign.positions[0]?.closedOn).toBeNull();
+  expect(
+    campaign.positions[0]?.legs[0]?.trades.map((trade) => [trade.action, trade.quantity]),
+  ).toEqual([
+    ["open", 10],
+    ["close", 5],
+  ]);
+  expect(campaign.positions[0]?.revision).not.toBe(observed);
+});
+
+test.each(["close", "expire", "assign", "link-hedge"] as const)(
+  "%s checks stale revision before eligibility and target lookup",
+  async (action) => {
+    const fixture = await put();
+    const observed = await expectedRevision(fixture.positionId);
+    expect((await post(fixture.positionId, "expire", {})).status).toBe(200);
+    const before = await database.db
+      .select()
+      .from(s.trades)
+      .where(eq(s.trades.legId, fixture.legId));
+    const body = {
+      close: {
+        fills: [{ legId: randomUUID(), quantity: 1, price: "0.40" }],
+        tradeDate: "2026-09-15",
+      },
+      expire: { tradeDate: "2026-09-15" },
+      assign: { legId: randomUUID(), tradeDate: "2026-09-15" },
+      "link-hedge": { campaignId: randomUUID() },
+    }[action];
+    const response = await rawPost(fixture.positionId, action, {
+      ...body,
+      expectedRevision: observed,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: "Position changed. Reload the campaign before another action.",
+      code: "stale_revision",
+    });
+    expect(
+      await database.db.select().from(s.trades).where(eq(s.trades.legId, fixture.legId)),
+    ).toEqual(before);
+  },
+);
+
+test.each(["close", "expire", "assign", "link-hedge"] as const)(
+  "%s requires a well-formed lowercase observed revision before opening a connection",
+  async (action) => {
+    const noDb = createApp({
+      withDb: async () => {
+        throw new Error("must not connect");
+      },
+      now: () => new Date("2026-10-17T03:30:00Z"),
+    });
+    const body = {
+      close: { fills: [{ legId: randomUUID(), quantity: 1, price: "0.40" }] },
+      expire: {},
+      assign: { legId: randomUUID() },
+      "link-hedge": { campaignId: randomUUID() },
+    }[action];
+    for (const revision of [
+      undefined,
+      null,
+      42,
+      "",
+      "a".repeat(63),
+      "a".repeat(65),
+      "g".repeat(64),
+      "A".repeat(64),
+    ]) {
+      const response = await noDb.request(`/api/positions/${randomUUID()}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...body,
+          ...(revision === undefined ? {} : { expectedRevision: revision }),
+        }),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: "Expected lowercase SHA-256 position revision",
+      });
+    }
+  },
+);
+
+test("T6 manual trade patch changes campaign revision and invalidates the observed lifecycle input", async () => {
+  const fixture = await put();
+  const observed = await expectedRevision(fixture.positionId);
+  const [trade] = await database.db
+    .select()
+    .from(s.trades)
+    .where(eq(s.trades.legId, fixture.legId));
+  assert(trade);
+  const patch = await app.request(`/api/trades/${trade.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ price: "1.85" }),
+  });
+  expect(patch.status).toBe(200);
+  expect(await expectedRevision(fixture.positionId)).not.toBe(observed);
+  const response = await rawPost(fixture.positionId, "close", {
+    expectedRevision: observed,
+    fills: [{ legId: fixture.legId, quantity: 5, price: "0.40" }],
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    error: "Position changed. Reload the campaign before another action.",
+    code: "stale_revision",
+  });
+  expect(
+    (await database.db.select().from(s.trades).where(eq(s.trades.legId, fixture.legId))).map(
+      (trade) => [trade.action, trade.quantity, trade.price, trade.cash],
+    ),
+  ).toEqual([["open", 10, 18500, 18500000]]);
+  expect(
+    (
+      await post(fixture.positionId, "close", {
+        fills: [{ legId: fixture.legId, quantity: 5, price: "0.40" }],
+      })
+    ).status,
+  ).toBe(200);
 });
 
 test("SPXL buyback books 537.40 and closes its position", async () => {
@@ -491,7 +657,7 @@ test("malformed JSON and invalid/unknown ids have400/404 boundary responses", as
     (await app.request(`/api/positions/${randomUUID()}/close`, { method: "POST", body: "{" }))
       .status,
   ).toBe(400);
-  expect((await post("bad", "expire", {})).status).toBe(400);
+  expect((await rawPost("bad", "expire", {})).status).toBe(400);
   expect((await post(randomUUID(), "expire", {})).status).toBe(404);
 });
 
@@ -506,7 +672,7 @@ test("database failure propagates to500 rather than conflict or validation", asy
     (
       await broken.request(`/api/positions/${randomUUID()}/expire`, {
         method: "POST",
-        body: "{}",
+        body: JSON.stringify({ expectedRevision: "0".repeat(64) }),
         headers: { "Content-Type": "application/json" },
       })
     ).status,

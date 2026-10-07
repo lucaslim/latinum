@@ -13,6 +13,7 @@ import { allocateRealizedTrades } from "../domain/lifecyclePnl.ts";
 import type { RealizedAllocation } from "../domain/lifecycleTypes.ts";
 import { divMoney4, type Money4, subMoney4 } from "../domain/money.ts";
 import type { Database } from "./database.ts";
+import { positionRevision } from "./positionRevision.ts";
 import { repository } from "./repository.ts";
 import * as s from "./schema.ts";
 
@@ -21,6 +22,12 @@ export class LifecycleValidationError extends Error {
 }
 export class LifecycleConflictError extends Error {
   readonly status = 409;
+}
+
+export class StalePositionRevisionError extends LifecycleConflictError {
+  constructor() {
+    super("Position changed. Reload the campaign before another action.");
+  }
 }
 
 type StoredTrade = typeof s.trades.$inferSelect;
@@ -65,7 +72,7 @@ function allocations(trades: readonly (StoredTrade | Event)[]): RealizedAllocati
   );
 }
 
-async function snapshot(db: Database, id: string) {
+async function snapshot(db: Database, id: string, expectedRevision: string) {
   const accounts = await db.select({ id: s.accounts.id }).from(s.accounts);
   if (accounts.length > 1) throw new LifecycleConflictError("Lifecycle requires a single account");
   const [account] = accounts;
@@ -94,6 +101,8 @@ async function snapshot(db: Database, id: string) {
       ),
     )
     .orderBy(s.trades.tradeDate, s.trades.createdAt, s.trades.id);
+  if (positionRevision(position, legs, trades) !== expectedRevision)
+    throw new StalePositionRevisionError();
   const balances = new Map<string, number>();
   for (const leg of legs) {
     const events = trades.filter((t) => t.legId === leg.id);
@@ -170,7 +179,7 @@ async function append(db: Database, state: Snapshot, events: Event[]): Promise<L
 export function lifecycleRepository(db: Database) {
   async function closePosition(id: string, input: CloseInput): Promise<LifecycleResponse | null> {
     return db.transaction(async (tx) => {
-      const state = await snapshot(tx, id);
+      const state = await snapshot(tx, id, input.expectedRevision);
       if (!state) return null;
       requireOpen(state);
       checkDate(state, input.tradeDate);
@@ -228,7 +237,7 @@ export function lifecycleRepository(db: Database) {
 
   async function expirePosition(id: string, input: ExpireInput): Promise<LifecycleResponse | null> {
     return db.transaction(async (tx) => {
-      const state = await snapshot(tx, id);
+      const state = await snapshot(tx, id, input.expectedRevision);
       if (!state) return null;
       requireOpen(state);
       checkDate(state, input.tradeDate);
@@ -257,7 +266,7 @@ export function lifecycleRepository(db: Database) {
 
   async function assignPosition(id: string, input: AssignInput): Promise<LifecycleResponse | null> {
     return db.transaction(async (tx) => {
-      const state = await snapshot(tx, id);
+      const state = await snapshot(tx, id, input.expectedRevision);
       if (!state) return null;
       const leg = state.legs.find((l) => l.id === input.legId);
       if (!leg) throw new LifecycleValidationError("Assignment leg does not belong to position");
@@ -353,7 +362,7 @@ export function lifecycleRepository(db: Database) {
 
   async function linkHedge(id: string, input: LinkHedgeRequest): Promise<LinkHedgeResponse | null> {
     return db.transaction(async (tx) => {
-      const state = await snapshot(tx, id);
+      const state = await snapshot(tx, id, input.expectedRevision);
       if (!state) return null;
       const [target] = await tx
         .select()

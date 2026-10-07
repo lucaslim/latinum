@@ -1,25 +1,26 @@
 # Lifecycle actions (T8)
 
 All four actions are `POST /api/positions/:id/<action>`. JSON requests use decimal USD
-strings, positive integer quantities and New York `tradeDate` strings. Omitted dates
+strings, positive integer quantities, New York `tradeDate` strings and the observed position's
+`expectedRevision` (a 64-character lowercase hexadecimal revision returned by the campaign read). Omitted dates
 use `todayNY` on the server; future dates are rejected. Fees are signed (zero or negative)
 and default to zero. Responses are private and uncached. Invalid bodies or unsupported
 operations are 400; absent records are 404; exhausted quantities/conflicting state are 409.
 A client must not automatically retry a mutation after an uncertain network response.
 
-- `close`: `{ "fills": [{ "legId": "<uuid>", "quantity": 5, "price": "0.40", "fees": "-1.30" }], "tradeDate": "2026-10-16" }`.
+- `close`: `{ "expectedRevision": "<revision>", "fills": [{ "legId": "<uuid>", "quantity": 5, "price": "0.40", "fees": "-1.30" }], "tradeDate": "2026-10-16" }`.
   Each leg has its own execution price. This does not infer a spread's leg prices from a net fill.
   Spread closes must retain balanced quantities; held covered calls must retain enough stock
   for their remaining calls. Dismantling a strategy into naked residual legs is not supported.
-- `expire`: `{ "tradeDate": "2026-10-16" }`. Expires all remaining option quantities at zero
+- `expire`: `{ "expectedRevision": "<revision>", "tradeDate": "2026-10-16" }`. Expires all remaining option quantities at zero
   cash, price and fees. Expiry must have been reached; stock is untouched. Repeating it
   returns 409, not another booking.
-- `assign`: `{ "legId": "<uuid>", "tradeDate": "2026-10-16", "fees": "0" }`.
+- `assign`: `{ "expectedRevision": "<revision>", "legId": "<uuid>", "tradeDate": "2026-10-16", "fees": "0" }`.
   Only an unadjusted short put in a CSP is supported. Assigns all remaining contracts,
   writes the option event, a separate stock/swing position in the same campaign, its stock
   leg/opening trade at the strike, and the assignment link in one transaction. Calls,
   spreads, long options and adjusted deliverables are rejected with 400.
-- `link-hedge`: `{ "campaignId": "<uuid>" }`. Moves an open, non-roll-linked hedge into a
+- `link-hedge`: `{ "expectedRevision": "<revision>", "campaignId": "<uuid>" }`. Moves an open, non-roll-linked hedge into a
   campaign in the same account. The source campaign remains for audit history; linking
   to its current campaign is a no-op. There is no unlink action.
 
@@ -65,6 +66,18 @@ calls use the same strategy model.
 If a lifecycle POST commits but its refresh fails, the campaign replaces stale action forms
 with an error and a read-only retry. A lost POST response, unreadable successful response, or
 server/proxy 5xx is also an uncertain outcome: the same read-only recovery blocks resubmission
-until authoritative campaign data reloads. Definitive HTTP 4xx rejections keep the form available
-for correction. Retrying the read never resubmits a mutation; this is UI failure containment,
-not a persisted request-ID/idempotency contract.
+until campaign data reloads. A read can still precede an outstanding transaction's commit;
+it does not confirm the original mutation's outcome. Each new submission therefore carries the
+revision actually observed by that form. The server compares it under the position row lock,
+before other eligibility checks: if either of two submissions changes the position first, the
+other receives 409 with `code: "stale_revision"` and writes nothing. The UI removes stale action
+forms and requires another read on this conflict. Other definitive HTTP 4xx rejections keep the
+form available for correction. Retrying the read never resubmits a mutation.
+
+The revision is derived from canonical position lifecycle fields, leg definitions and trade
+history, including trade IDs and quantities. It includes campaign moves and trade edits, not
+just net open quantity, so close/reopen cannot restore an old token. Marks, notes and tags do
+not invalidate it. Both campaign reads and locked writes use the same derivation; no revision
+column or migration is needed. This is optimistic concurrency, not a persisted request-ID or
+exactly-once contract: an intentional submission based on a newly observed revision is a new
+action.

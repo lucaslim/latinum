@@ -27,6 +27,24 @@ afterEach(() => {
 });
 
 describe("Hash routes", () => {
+  it("renders stale revision recovery without leaving mutation forms available", () => {
+    vi.stubGlobal("window", { location: { hash: "#/campaigns/nvdl-campaign" } });
+    vi.spyOn(campaignApi, "useCampaign").mockReturnValue({
+      load: {
+        status: "error",
+        message: "Position changed. Reload the campaign before another action.",
+      },
+      retry: vi.fn(),
+      saveMark: vi.fn(),
+      saveLifecycle: vi.fn(),
+    });
+    const html = renderToStaticMarkup(<App />);
+    expect(text(html)).toContain("Position changed. Reload the campaign before another action.");
+    expect(text(html)).toContain("Retry campaign");
+    expect(html).not.toContain("lifecycle-actions");
+    expect(text(html)).not.toContain("Close NVDL position");
+    expect(text(html)).not.toContain("Record close");
+  });
   it("renders campaign load errors with a retry and a hash-only Back link", () => {
     vi.stubGlobal("window", { location: { hash: "#/campaigns/missing" } });
     const hook = vi.spyOn(campaignApi, "useCampaign").mockReturnValue({

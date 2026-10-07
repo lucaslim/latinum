@@ -15,11 +15,25 @@ interface Fixtures {
   targetCampaignId: string;
 }
 let fixtures: Fixtures;
+let muuRevision: string;
+let dramRevision: string;
 test.use({ viewport: { width: 390, height: 844 } });
 test.beforeEach(async ({ request }) => {
   const response = await request.post("/api/test/lifecycle-fixture");
   expect(response.status()).toBe(200);
   fixtures = await response.json();
+  for (const [name, fixture] of [
+    ["muu", fixtures.muu],
+    ["dram", fixtures.dram],
+  ] as const) {
+    const read = await request.get(`/api/campaigns/${fixture.campaignId}`);
+    expect(read.status()).toBe(200);
+    const campaign: CampaignResponse = await read.json();
+    const position = campaign.positions.find((position) => position.id === fixture.positionId);
+    if (!position) throw new Error("Lifecycle fixture position missing");
+    if (name === "muu") muuRevision = position.revision;
+    else dramRevision = position.revision;
+  }
 });
 
 test("an open campaign offers a close action on phone", async ({ page }) => {
@@ -82,7 +96,7 @@ test("MUU expiration books $1,493.40 and a repeat is a conflict", async ({ page,
   await expect(timeline).toContainText("expire");
   await expect(timeline).toContainText("10 contracts at $0.00 · Cash +$0 · Fees $0.00");
   const repeat = await request.post(`/api/positions/${fixtures.muu.positionId}/expire`, {
-    data: { tradeDate: "2026-10-16" },
+    data: { expectedRevision: muuRevision, tradeDate: "2026-10-16" },
   });
   expect(repeat.status()).toBe(409);
 });
@@ -197,7 +211,7 @@ test("covered call options load errors are retryable without leaving the campaig
   request,
 }) => {
   const assigned = await request.post(`/api/positions/${fixtures.dram.positionId}/assign`, {
-    data: { legId: fixtures.dram.legId, tradeDate: "2026-10-16" },
+    data: { expectedRevision: dramRevision, legId: fixtures.dram.legId, tradeDate: "2026-10-16" },
   });
   expect(assigned.status()).toBe(200);
   await page.goto(`/#/campaigns/${fixtures.dram.campaignId}`);
@@ -223,7 +237,7 @@ for (const availability of ["missing", "insufficient"] as const) {
     request,
   }) => {
     const assigned = await request.post(`/api/positions/${fixtures.dram.positionId}/assign`, {
-      data: { legId: fixtures.dram.legId, tradeDate: "2026-10-16" },
+      data: { expectedRevision: dramRevision, legId: fixtures.dram.legId, tradeDate: "2026-10-16" },
     });
     expect(assigned.status()).toBe(200);
     const response = await request.get("/api/trade-form/options");
@@ -264,7 +278,7 @@ for (const availability of ["missing", "insufficient"] as const) {
 for (const dismissal of ["cancel", "navigation"] as const) {
   test(`${dismissal} discards stale covered call option responses`, async ({ page, request }) => {
     const assigned = await request.post(`/api/positions/${fixtures.dram.positionId}/assign`, {
-      data: { legId: fixtures.dram.legId, tradeDate: "2026-10-16" },
+      data: { expectedRevision: dramRevision, legId: fixtures.dram.legId, tradeDate: "2026-10-16" },
     });
     expect(assigned.status()).toBe(200);
     const response = await request.get("/api/trade-form/options");

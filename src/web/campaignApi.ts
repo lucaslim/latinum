@@ -93,6 +93,18 @@ export function useCampaign(id: string) {
     try {
       result = await postLifecycle(positionId, mutation, request.abort.signal);
     } catch (error) {
+      if (
+        error instanceof LifecycleHttpError &&
+        error.status === 409 &&
+        error.code === "stale_revision"
+      ) {
+        const message = "Position changed. Reload the campaign before another action.";
+        if (active.current === request) {
+          active.current = null;
+          setLoad({ status: "error", message });
+        }
+        throw error;
+      }
       if (error instanceof LifecycleHttpError && error.status >= 400 && error.status < 500)
         throw error;
       const status = error instanceof LifecycleHttpError ? ` (HTTP ${error.status})` : "";

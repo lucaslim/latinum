@@ -87,7 +87,8 @@ export function LifecycleActions({
             if (inFlight.current) return;
             const form = new FormData(event.currentTarget);
             const tradeDate = String(form.get("tradeDate") ?? "");
-            const date = tradeDate ? { tradeDate } : {};
+            const observed = { expectedRevision: position.revision };
+            const date = tradeDate ? { ...observed, tradeDate } : observed;
             let mutation: LifecycleMutation;
             switch (mode.action) {
               case "close":
@@ -118,7 +119,7 @@ export function LifecycleActions({
               case "link-hedge":
                 mutation = {
                   action: "link-hedge",
-                  input: { campaignId: String(form.get("campaignId")) },
+                  input: { ...observed, campaignId: String(form.get("campaignId")) },
                 };
                 break;
             }

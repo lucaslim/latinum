@@ -41,6 +41,7 @@ export interface CampaignLeg {
 
 export interface CampaignPosition {
   id: string;
+  revision: string;
   underlying: string;
   strategy: CampaignStrategy;
   role: CampaignRole;
