@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useOpenPositions } from "./api.ts";
 import { useCampaign } from "./campaignApi.ts";
 import { CampaignDetail } from "./components/CampaignDetail.tsx";
+import { DownloadExport } from "./components/DownloadExport.tsx";
 import { PositionsSheet } from "./components/PositionsSheet.tsx";
 import { ThemeSelect } from "./components/ThemeSelect.tsx";
 
@@ -61,6 +62,7 @@ export function App() {
           <ThemeSelect />
         </header>
         <main className="main">
+          <DownloadExport />
           {campaignId ? <CampaignRoute key={campaignId} id={campaignId} /> : <PositionsRoute />}
         </main>
       </div>
