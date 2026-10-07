@@ -218,13 +218,17 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
         call.leg.side === "short" &&
         backing
       ) {
-        const stockShares = backing.quantity * backing.leg.multiplier;
+        const backingCalls = openCalls.filter(
+          (c) => backingByCall.get(c.leg.id)?.leg.id === backing.leg.id,
+        );
+        const coveredShares = backingCalls.reduce(
+          (shares, c) => shares + c.quantity * c.leg.multiplier,
+          0,
+        );
         const basis = openingEntry(backing.leg, campaign);
         const premium = mulMoney4(call.entry, call.quantity * call.leg.multiplier);
         const allPremium = sumMoney4(
-          openCalls
-            .filter((c) => backingByCall.get(c.leg.id)?.leg.id === backing.leg.id)
-            .map((c) => mulMoney4(c.entry, c.quantity * c.leg.multiplier)),
+          backingCalls.map((c) => mulMoney4(c.entry, c.quantity * c.leg.multiplier)),
         );
         const shares = call.quantity * call.leg.multiplier;
         const assigned = backing.leg.trades.some((t) =>
@@ -237,7 +241,7 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
           shares,
           basis,
           basisSource: assigned ? "assignment" : "opening",
-          adjustedBasis: adjustedBasis(basis, [divMoney4(allPremium, stockShares)]),
+          adjustedBasis: adjustedBasis(basis, [divMoney4(allPremium, coveredShares)]),
           premium,
           strike: call.leg.strike,
           calledAwayGain: calledAwayGain({

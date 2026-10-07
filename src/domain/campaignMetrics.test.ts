@@ -365,7 +365,7 @@ describe("open balances and basis", () => {
         shares: 500,
         collateral: m("27500"),
         premium: m("550"),
-        adjustedBasis: m("52.6333"),
+        adjustedBasis: m("51.90"),
         calledAwayGain: m("1550"),
       },
     ]);
@@ -388,7 +388,7 @@ describe("open balances and basis", () => {
     expect(buildCampaignView(c).coveredCalls).toMatchObject([
       {
         basis: m("54"),
-        adjustedBasis: m("53.175"),
+        adjustedBasis: m("52.90"),
         basisSource: "assignment",
         calledAwayGain: m("3150"),
       },
@@ -397,6 +397,7 @@ describe("open balances and basis", () => {
 
   it("adjusts stock basis for all open calls but never historical premiums", () => {
     const c = clone(dramCampaign);
+    leg(c, 1).trades.push(closing(5));
     const historical = clone(dramCampaign).positions[1];
     const another = clone(dramCampaign).positions[1];
     if (!historical || !another) throw new Error("Missing call fixture");
@@ -405,6 +406,7 @@ describe("open balances and basis", () => {
     another.id = "another-call";
     another.legs[0] = {
       ...leg(c, 1),
+      id: "another-call-leg",
       trades: [
         {
           ...(leg(c, 1).trades[0] as CampaignTrade),
@@ -417,8 +419,8 @@ describe("open balances and basis", () => {
     };
     c.positions.push(historical, another);
     expect(buildCampaignView(c).coveredCalls).toMatchObject([
-      { adjustedBasis: m("51.60"), premium: m("1650") },
-      { adjustedBasis: m("51.60"), premium: m("450") },
+      { adjustedBasis: m("51.9667"), premium: m("1100") },
+      { adjustedBasis: m("51.9667"), premium: m("450") },
     ]);
   });
 
@@ -471,6 +473,9 @@ describe("explicit covered leg and residual capital", () => {
     expect(buildCampaignView(c).swings).toEqual([]);
     leg(c, 2).trades.push(closing(5));
     leg(c, 1).mark = { asOf: d("2026-10-01"), source: "manual", price: m("57") };
+    expect(buildCampaignView(c).coveredCalls).toMatchObject([
+      { shares: 1000, basis: 530000, premium: 11000000, adjustedBasis: 519000 },
+    ]);
     expect(buildCampaignView(c).swings).toMatchObject([
       {
         legId: "dram-assigned-stock-leg",
@@ -493,7 +498,7 @@ describe("explicit covered leg and residual capital", () => {
     leg(c, 0, 1).trades.push(closing(5));
     leg(c).mark = { asOf: d("2026-10-01"), source: "manual", price: m("55") };
     expect(buildCampaignView(c)).toMatchObject({
-      coveredCalls: [{ shares: 1000, basis: 530000, collateral: 550000000 }],
+      coveredCalls: [{ shares: 1000, basis: 530000, collateral: 550000000, adjustedBasis: 519000 }],
       swings: [
         {
           positionId: "dram-call",
