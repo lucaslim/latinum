@@ -103,6 +103,7 @@ describe("buildCampaignView T3 fixtures", () => {
       ["open", null],
     ]);
     expect(view.csp).toBe(null);
+    expect(view.unsupportedPositionIds).toEqual([]);
   });
 
   it("links actual assignment to both trades and derives basis from the stock opening", () => {
@@ -275,6 +276,86 @@ describe("open balances and basis", () => {
     expect(buildCampaignView(c).swings).toMatchObject([
       { entry: m("455.20"), unrealized: null, mark: null },
     ]);
+  });
+
+  it("leaves a CC unsupported after a partial stock close removes full backing", () => {
+    const c = clone(dramCampaign);
+    const close = { ...closing(50), id: "dram-stock-close", price: m("53"), cash: m("2650") };
+    leg(c).trades.push(close);
+    const recorded = clone(c);
+    const view = buildCampaignView(c);
+    expect(openLegQuantity(leg(c))).toBe(1450);
+    expect(view.coveredCalls).toEqual([]);
+    expect(view.unsupportedPositionIds).toEqual(["dram-call"]);
+    expect(view.swings).toMatchObject([{ positionId: "dram-stock", quantity: 1450 }]);
+    expect(view.timeline.map((e) => [e.legId, e.trade])).toEqual([
+      ["dram-stock-leg", leg(dramCampaign).trades[0]],
+      ["dram-call-leg", leg(dramCampaign, 1).trades[0]],
+      ["dram-stock-leg", close],
+    ]);
+    expect(c).toEqual(recorded);
+  });
+
+  it("restores exact CC backing by aggregating open stock lots", () => {
+    const c = clone(dramCampaign);
+    leg(c).trades.push({ ...closing(50), price: m("53"), cash: m("2650") });
+    const extraStock = clone(dramCampaign).positions[0];
+    if (!extraStock) throw new Error("Missing stock fixture");
+    extraStock.id = "dram-extra-stock";
+    extraStock.legs = [
+      {
+        ...leg(dramCampaign),
+        id: "dram-extra-stock-leg",
+        trades: [
+          {
+            id: "dram-extra-stock-open",
+            action: "open",
+            quantity: 50,
+            tradeDate: d("2026-10-01"),
+            price: m("53"),
+            cash: m("-2650"),
+            fees: m("0"),
+          },
+        ],
+      },
+    ];
+    c.positions.push(extraStock);
+    expect(buildCampaignView(c)).toMatchObject({
+      coveredCalls: [
+        { shares: 1500, basis: m("53"), adjustedBasis: m("51.90"), calledAwayGain: m("4650") },
+      ],
+      unsupportedPositionIds: [],
+    });
+    leg(c, 2).trades.push({ ...closing(1), price: m("53"), cash: m("53") });
+    expect(buildCampaignView(c)).toMatchObject({
+      coveredCalls: [],
+      unsupportedPositionIds: ["dram-call"],
+    });
+  });
+
+  it("checks backing against remaining calls with their actual multiplier", () => {
+    const c = clone(dramCampaign);
+    leg(c, 1).trades.push(closing(5));
+    leg(c, 1).multiplier = 50;
+    leg(c).trades.push({ ...closing(1000), price: m("53"), cash: m("53000") });
+    expect(buildCampaignView(c)).toMatchObject({
+      coveredCalls: [{ shares: 500, basis: m("53"), premium: m("550"), calledAwayGain: m("1550") }],
+      unsupportedPositionIds: [],
+    });
+    leg(c).trades.push({ ...closing(1), id: "stock-close-one", price: m("53"), cash: m("53") });
+    expect(buildCampaignView(c)).toMatchObject({
+      coveredCalls: [],
+      unsupportedPositionIds: ["dram-call"],
+    });
+  });
+
+  it("does not treat standard share backing as sufficient for a larger call multiplier", () => {
+    const c = clone(dramCampaign);
+    leg(c, 1).multiplier = 200;
+    expect(buildCampaignView(c)).toMatchObject({
+      coveredCalls: [],
+      unsupportedPositionIds: ["dram-call"],
+    });
   });
 
   it("uses partial CC premium and its real multiplier", () => {

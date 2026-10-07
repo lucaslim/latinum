@@ -181,15 +181,15 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
       const [call] = options;
       if (options.length === 0) continue;
       const backing = stock.filter(({ leg }) => leg.underlying === position.underlying);
+      const stockShares = backing.reduce((n, s) => n + s.quantity * s.leg.multiplier, 0);
       if (
         options.length === 1 &&
         call &&
         isOption(call) &&
         call.leg.kind === "call" &&
         call.leg.side === "short" &&
-        backing.length > 0
+        stockShares >= call.quantity * call.leg.multiplier
       ) {
-        const stockShares = backing.reduce((n, s) => n + s.quantity * s.leg.multiplier, 0);
         const basis = divMoney4(
           sumMoney4(
             backing.map((s) =>
