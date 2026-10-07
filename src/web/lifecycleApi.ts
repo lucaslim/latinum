@@ -34,12 +34,20 @@ export async function saveLifecycle(
     },
   );
   if (!response.ok) {
-    const body: { error?: string } = response.headers
-      .get("content-type")
-      ?.includes("application/json")
-      ? await response.json()
-      : {};
-    throw new Error(`${body.error ?? "Could not save lifecycle action"} (HTTP ${response.status})`);
+    const fallback = "Could not save lifecycle action";
+    let body: unknown = {};
+    if (response.headers.get("content-type")?.includes("application/json")) {
+      try {
+        body = await response.json();
+      } catch (cause) {
+        throw new Error(`${fallback} (HTTP ${response.status})`, { cause });
+      }
+    }
+    const detail =
+      typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
+        ? body.error
+        : fallback;
+    throw new Error(`${detail} (HTTP ${response.status})`);
   }
   return response.json();
 }

@@ -57,6 +57,54 @@ describe("Lifecycle transport", () => {
     ).rejects.toThrow("Position is already closed (HTTP 409)");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+  it.each(["", '{"error":', "<html>Proxy error</html>"])(
+    "retains HTTP status when a JSON-labelled rejection has an invalid body: %s",
+    async (body) => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(body, {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(
+        saveLifecycle("position", { action: "expire", input: {} }, new AbortController().signal),
+      ).rejects.toMatchObject({
+        message: "Could not save lifecycle action (HTTP 502)",
+        cause: expect.any(SyntaxError),
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each(["null", "7", '{"error":123}'])(
+    "uses the status-bearing fallback for a rejection without a string error: %s",
+    async (body) => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(body, {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(
+        saveLifecycle("position", { action: "expire", input: {} }, new AbortController().signal),
+      ).rejects.toThrow("Could not save lifecycle action (HTTP 409)");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("uses the HTTP fallback for a non-JSON rejection without retrying", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("Proxy error", {
+        status: 502,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      saveLifecycle("position", { action: "expire", input: {} }, new AbortController().signal),
+    ).rejects.toThrow("Could not save lifecycle action (HTTP 502)");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it("leaves network uncertainty explicit and never retries", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("Connection lost"));
     vi.stubGlobal("fetch", fetchMock);
