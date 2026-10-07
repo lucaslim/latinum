@@ -33,6 +33,7 @@ beforeEach(async () => {
   accountId = account.id;
 });
 
+/** Insert a lifecycle test campaign with optional opening date and account overrides. */
 async function campaign(openedOn = "2026-09-01", owner = accountId) {
   const [row] = await database.db
     .insert(s.campaigns)
@@ -105,6 +106,7 @@ const stock: NewLeg & { trades: [NewLeg["trades"][number]] } = {
     },
   ],
 };
+/** Create a fixture position and load its legs, returning identifiers for lifecycle calls. */
 async function position(legs: NewLeg[] = [muu], fields: Partial<NewPosition> = {}) {
   const source = await campaign();
   const id = await repository(database.db).createPosition({
@@ -121,7 +123,9 @@ async function position(legs: NewLeg[] = [muu], fields: Partial<NewPosition> = {
   assert(first);
   return { id, legs: loaded, legId: first.id, campaignId: source.id };
 }
+/** Bind the lifecycle repository to the current isolated test database. */
 const repo = () => lifecycleRepository(database.db);
+/** Build a partial-close input using literal price and fee fixtures. */
 const close = (
   legId: string,
   quantity = 5,
@@ -129,6 +133,7 @@ const close = (
   tradeDate: d("2026-10-01"),
   fills: [{ legId, quantity, price: m("0.40"), fees: m("-1.30") }],
 });
+/** Read lifecycle tables in stable identifier order for atomic rollback comparisons. */
 async function rows() {
   const { db } = database;
   return {
@@ -256,6 +261,7 @@ const spreadStrategies = [
   "call_credit_spread",
   "call_debit_spread",
 ] as const;
+/** Create a three-contract spread with equal quantities on its long and short legs. */
 async function spreadPosition(strategy: (typeof spreadStrategies)[number]) {
   const kind = strategy.startsWith("put_") ? "put" : "call";
   return position(
@@ -340,6 +346,7 @@ test.each(spreadStrategies)(
   },
 );
 
+/** Create a held covered call with fifteen calls backed by 1,500 DRAM shares. */
 async function coveredPosition() {
   return position(
     [

@@ -70,6 +70,7 @@ export function DerivedTradeMetrics({
   );
 }
 
+/** Render manual trade entry, optionally prefilled to sell calls against authoritative assigned shares. */
 export function TradeForm({
   asOf,
   options,
@@ -184,6 +185,7 @@ export function TradeForm({
     setTag("");
   };
 
+  /** Submit a valid trade once, report save failures and notify the parent only while mounted. */
   async function save(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!preview.success || busy.current) return;

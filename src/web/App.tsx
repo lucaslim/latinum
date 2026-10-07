@@ -43,6 +43,7 @@ type CoveredCallLoad =
   | { status: "error" | "unavailable"; message: string }
   | { status: "ready"; options: TradeFormOptions; assignedStock: AssignedStockOption };
 
+/** Load authoritative assigned-stock availability before rendering a prefilled covered-call form. */
 function AssignedCallForm({
   stockLegId,
   asOf,
@@ -119,6 +120,7 @@ function AssignedCallForm({
   );
 }
 
+/** Render campaign loading, recovery and lifecycle views with an assigned-share trade handoff. */
 function CampaignRoute({ id }: { id: string }) {
   const { load, retry, saveMark, saveLifecycle } = useCampaign(id);
   const [stockLegId, setStockLegId] = useState<string | null>(null);

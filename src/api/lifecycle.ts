@@ -19,6 +19,11 @@ import type { PositionsDeps } from "./positions.ts";
 
 export type LifecycleAction = "close" | "expire" | "assign" | "link-hedge";
 
+/**
+ * Create an uncached lifecycle handler that parses input before opening a database connection.
+ * Return 400 for invalid input, 404 for missing records and 409 for state conflicts;
+ * let unexpected failures propagate to the API error handler.
+ */
 export function lifecycleRoute(action: LifecycleAction, { withDb, now }: PositionsDeps): Handler {
   return async (c) => {
     c.header("Cache-Control", "private, no-store");

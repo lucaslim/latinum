@@ -9,12 +9,19 @@ export type NewLeg = Omit<typeof s.legs.$inferInsert, "positionId"> & { trades: 
 export type NewPosition = Omit<typeof s.positions.$inferInsert, "closedOn"> & { legs: NewLeg[] };
 
 export class CoveredStockConflictError extends Error {
+  /** Report a stock balance that cannot cover the calls referencing it. */
   constructor() {
     super("Covered calls exceed stock balance");
   }
 }
 
+/** Bind position, trade, heartbeat and open-book persistence operations to a database. */
 export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
+  /**
+   * Lock a position, append trades and recompute its closure date in one transaction.
+   * Reject foreign legs, negative historical balances and insufficient referenced stock coverage;
+   * return the final trade date when every leg is closed, or null while quantity remains.
+   */
   async function appendTrades(positionId: string, events: (typeof s.trades.$inferInsert)[]) {
     return db.transaction(async (tx) => {
       // Assigned CC saves lock this same stock parent before reserving coverage.

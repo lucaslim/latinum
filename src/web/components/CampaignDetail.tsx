@@ -16,6 +16,7 @@ export interface CampaignDetailProps {
 }
 
 const signedUsd = (amount: Money4) => `${amount >= 0 ? "+" : ""}${usd(amount)}`;
+/** Format Money4 as USD to cents with an explicit plus sign for nonnegative amounts. */
 const signedCents = (amount: Money4) => `${amount >= 0 ? "+" : ""}${usd(amount, 2)}`;
 const count = (quantity: number) => quantity.toLocaleString("en-US");
 
@@ -93,6 +94,7 @@ function MarkForm({
   );
 }
 
+/** Render campaign metrics, lifecycle controls and recorded trades with allocated realized P/L. */
 export function CampaignDetail({
   campaign,
   onSaveMark,

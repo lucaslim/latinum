@@ -40,6 +40,10 @@ export async function saveManualMark(
   return response.json();
 }
 
+/**
+ * Load a campaign and expose mutation callbacks with in-place refresh and stale-response guards.
+ * Uncertain lifecycle outcomes or failed post-save refreshes disable mutations until a read retry succeeds.
+ */
 export function useCampaign(id: string) {
   const [load, setLoad] = useState<CampaignLoad>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -86,6 +90,7 @@ export function useCampaign(id: string) {
     }
   }
 
+  /** Submit once and refresh; require a read retry after uncertain outcomes or a failed post-save refresh. */
   const saveLifecycle: SaveLifecycle = async (positionId, mutation) => {
     const request = active.current;
     if (!request || request.id !== id) throw new Error("Campaign is no longer active");

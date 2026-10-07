@@ -9,6 +9,7 @@ import type { createApp } from "./app.ts";
 
 /** Local Playwright book only. Never registered by the deployed createApp. */
 export function installTestFixtures(app: ReturnType<typeof createApp>, db: Database) {
+  /** Atomically replace the local test book with the baseline seed. */
   async function reset() {
     await db.transaction(async (tx) => {
       await tx.execute(
@@ -28,6 +29,7 @@ export function installTestFixtures(app: ReturnType<typeof createApp>, db: Datab
       const account = accounts[0];
       if (!account) throw new Error("Missing fixture account");
       const accountId = account.id;
+      /** Create a short-put campaign with literal opening amounts in the fixture transaction. */
       async function put(
         underlying: string,
         quantity: number,

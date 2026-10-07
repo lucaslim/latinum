@@ -6,6 +6,7 @@ import type { LifecycleMutation, SaveLifecycle } from "../lifecycleApi.ts";
 import "./lifecycle.css";
 
 type Mode = { action: "close" | "expire" | "link-hedge" } | { action: "assign"; legId: string };
+/** Label a lifecycle leg by underlying, side, kind and optional strike. */
 const legName = (leg: CampaignLeg) =>
   `${leg.underlying} ${leg.side} ${leg.kind}${leg.strike === null ? "" : ` ${formatMoney4(leg.strike, 2)}`}`;
 const submitLabel = {
@@ -15,6 +16,7 @@ const submitLabel = {
   "link-hedge": "Record hedge link",
 };
 
+/** Offer eligible lifecycle forms with duplicate-submit guards and pending or failure feedback. */
 export function LifecycleActions({
   position,
   onSave,
@@ -43,6 +45,7 @@ export function LifecycleActions({
             leg.kind === "put" && leg.side === "short" && !leg.adjusted && leg.multiplier === 100,
         )
       : [];
+  /** Select an action, include all open legs by default and clear the previous error. */
   function choose(next: Mode) {
     setMode(next);
     setIncluded(openLegs.map((leg) => leg.id));

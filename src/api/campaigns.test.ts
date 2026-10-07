@@ -22,6 +22,7 @@ let dramId: string;
 let closedLegId: string;
 let incomeLegId: string;
 
+/** Seed a recorded DRAM assignment and covered call for campaign HTTP assertions. */
 async function wheel(db: Database) {
   const [account] = await db.select().from(s.accounts);
   assert(account);

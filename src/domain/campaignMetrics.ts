@@ -127,6 +127,11 @@ function recordedTimeline(campaign: CampaignResponse): CampaignTimelineEvent[] {
     .sort((a, b) => a.trade.tradeDate.localeCompare(b.trade.tradeDate));
 }
 
+/**
+ * Derive campaign scenarios, covered calls, hedges, residual swings and recorded history.
+ * Reserve stock for both held and referenced calls without double-counting capital,
+ * and collect unsupported position identifiers for the caller to display.
+ */
 export function buildCampaignView(campaign: CampaignResponse): CampaignView {
   const view: CampaignView = {
     csp: null,
@@ -356,6 +361,7 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
   return view;
 }
 
+/** Value remaining swing quantity at its mark, keeping assignment display basis separate from P/L cost. */
 function swingView(
   position: CampaignPosition,
   open: OpenLeg,

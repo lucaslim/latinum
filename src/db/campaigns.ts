@@ -11,12 +11,15 @@ export class ManualMarkConflictError extends Error {
 }
 
 export class ManualMarkDateError extends Error {
+  /** Describe a mark date on which the leg had no eligible open quantity. */
   constructor(message = "Leg was not open on mark date") {
     super(message);
   }
 }
 
+/** Bind campaign snapshot reads and validated manual-mark writes to a database. */
 export function campaignRepository(db: Database) {
+  /** Read a consistent single-account campaign snapshot with marks no later than asOf; return null if absent. */
   async function readCampaign(id: string, asOf: IsoDate): Promise<CampaignResponse | null> {
     return db.transaction(
       async (tx) => {
@@ -125,6 +128,11 @@ export function campaignRepository(db: Database) {
     );
   }
 
+  /**
+   * Lock the parent position and upsert a manual mark for eligible open swing quantity.
+   * Check current and historical held-call coverage before marking residual stock;
+   * return null for a missing leg and throw for ineligible quantity or dates.
+   */
   async function saveManualMark(
     legId: string,
     mark: CampaignMark & { source: "manual" },

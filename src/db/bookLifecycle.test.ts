@@ -79,6 +79,7 @@ it.each(["close", "expire"] as const)(
           },
         ]),
       ).toBe(null);
+      /** Reload the held-stock position and fail if it has disappeared from the open book. */
       const read = async () => {
         const row = (await repo.readOpenPositions(accountId)).find((p) => p.id === position.id);
         if (!row) throw new Error("Held shares disappeared from open book");
