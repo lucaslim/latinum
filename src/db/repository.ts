@@ -1,5 +1,7 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { divMoney4, mulMoney4, sumMoney4 } from "../domain/money.ts";
+import { assignedShareBasis } from "../domain/wheel.ts";
 import * as s from "./schema.ts";
 
 export type NewTrade = Omit<typeof s.trades.$inferInsert, "legId">;
@@ -80,8 +82,36 @@ export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
               legs.map((leg) => leg.id),
             ),
           );
+        const coveredLegId = legs.find((leg) => leg.coveredLegId !== null)?.coveredLegId;
+        const assignedFills = coveredLegId
+          ? await db
+              .select({
+                price: s.trades.price,
+                quantity: s.trades.quantity,
+                premium: s.assignments.premiumPerShare,
+              })
+              .from(s.trades)
+              .innerJoin(s.assignments, eq(s.assignments.stockTradeId, s.trades.id))
+              .where(eq(s.trades.legId, coveredLegId))
+          : [];
+        if (coveredLegId && assignedFills.length === 0)
+          throw new Error("Covered stock leg has no assignment");
+        const coveredStock = coveredLegId
+          ? {
+              legId: coveredLegId,
+              basis: divMoney4(
+                sumMoney4(
+                  assignedFills.map((fill) =>
+                    mulMoney4(assignedShareBasis(fill.price, fill.premium), fill.quantity),
+                  ),
+                ),
+                assignedFills.reduce((sum, fill) => sum + fill.quantity, 0),
+              ),
+            }
+          : null;
         return {
           ...position,
+          coveredStock,
           legs: legs.map((leg) => ({
             ...leg,
             trades: trades.filter((event) => event.legId === leg.id),

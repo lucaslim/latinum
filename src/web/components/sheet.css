@@ -106,6 +106,16 @@ table.pos tfoot tr.sub td {
 table.pos tbody tr:hover td {
   background: var(--hover);
 }
+.edit-trade {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .tk {
   font-weight: 600;
   letter-spacing: 0.02em;

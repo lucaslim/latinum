@@ -35,6 +35,7 @@ const DASH: Cell = { text: "—", tone: "dim" };
 function strikeText(p: Position): string {
   switch (p.strategy) {
     case "stock":
+    case "day_trade":
       return `${p.shares} sh`;
     case "csp":
     case "cc":
@@ -70,6 +71,8 @@ function typeAndSide(p: Position): { type: Cell; side: string } {
       return { type: { text: "Put", tone: "muted" }, side: "long" };
     case "stock":
       return { type: { text: "Stock", tone: "muted" }, side: "long" };
+    case "day_trade":
+      return { type: { text: "Day trade", tone: "muted" }, side: "long" };
   }
 }
 
@@ -117,7 +120,7 @@ export function sheetRow(p: Position, asOf: IsoDate): SheetRowView {
     ...typeAndSide(p),
     expiry: expiry ? shortDate(expiry) : "—",
     dte: expiry ? String(dte(expiry, asOf)) : "—",
-    qty: p.strategy === "stock" ? "—" : String(p.qty),
+    qty: "shares" in p ? "—" : String(p.qty),
     ...moneyCells(p),
     income: p.role === "income",
     tint,

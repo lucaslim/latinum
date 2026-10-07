@@ -5,15 +5,30 @@ import { CampaignDetail } from "./components/CampaignDetail.tsx";
 import { DownloadExport } from "./components/DownloadExport.tsx";
 import { PositionsSheet } from "./components/PositionsSheet.tsx";
 import { ThemeSelect } from "./components/ThemeSelect.tsx";
+import { TradeEditor } from "./components/TradeEditor.tsx";
 
 function PositionsRoute() {
   const load = useOpenPositions();
+  const [editingPositionId, setEditingPositionId] = useState<string | null>(null);
   return (
     <>
       {load.status === "loading" && <p role="status">Loading positions…</p>}
       {load.status === "error" && <p role="alert">{load.message}</p>}
       {load.status === "ready" && (
-        <PositionsSheet positions={load.data.positions} asOf={load.data.asOf} />
+        <>
+          <TradeEditor
+            asOf={load.data.asOf}
+            positions={load.data.positions}
+            onSaved={load.refresh}
+            editingPositionId={editingPositionId}
+            onEditDone={() => setEditingPositionId(null)}
+          />
+          <PositionsSheet
+            positions={load.data.positions}
+            asOf={load.data.asOf}
+            onEdit={setEditingPositionId}
+          />
+        </>
       )}
     </>
   );

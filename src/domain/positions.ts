@@ -49,7 +49,7 @@ export interface LongOption extends OptionBase {
 }
 
 export interface StockPosition {
-  strategy: "stock";
+  strategy: "stock" | "day_trade";
   role: "swing";
   underlying: string;
   shares: number;
@@ -224,6 +224,7 @@ export function positionMetrics(p: Position): Metrics {
         maxProfit: subMoney4(perContracts(p.strike, p.qty), perContracts(p.price, p.qty)),
       });
     case "stock":
+    case "day_trade":
       return { kind: "stock", contracts: 0, collateral: mulMoney4(p.price, p.shares) };
   }
 }

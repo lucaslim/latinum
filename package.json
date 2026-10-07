@@ -29,7 +29,8 @@
     "drizzle-orm": "0.45.3",
     "hono": "^4.13.12",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

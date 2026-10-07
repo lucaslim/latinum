@@ -12,9 +12,11 @@ async function fetchOpenPositions(signal: AbortSignal): Promise<OpenPositionsRes
   return res.json();
 }
 
-export function useOpenPositions(): Load {
+export function useOpenPositions(): Load & { refresh: () => void } {
   const [load, setLoad] = useState<Load>({ status: "loading" });
+  const [revision, setRevision] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Saving a fill invalidates the book without reloading the page.
   useEffect(() => {
     const abort = new AbortController();
     fetchOpenPositions(abort.signal).then(
@@ -28,7 +30,7 @@ export function useOpenPositions(): Load {
       },
     );
     return () => abort.abort();
-  }, []);
+  }, [revision]);
 
-  return load;
+  return { ...load, refresh: () => setRevision((value) => value + 1) };
 }

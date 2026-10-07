@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   char,
   check,
@@ -110,6 +111,7 @@ export const legs = pgTable(
     expiry: date(),
     multiplier: integer().notNull().default(100),
     adjusted: boolean().notNull().default(false),
+    coveredLegId: uuid().references((): AnyPgColumn => legs.id),
   },
   (t) => [
     check("legs_strike", sql`${t.strike} > 0`),
