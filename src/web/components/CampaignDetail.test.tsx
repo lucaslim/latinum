@@ -125,6 +125,61 @@ describe("Campaign transport", () => {
   });
 });
 
+describe("Roll integration", () => {
+  it("offers a campaign-level roll picker only with the lifecycle callback", () => {
+    const html = renderToStaticMarkup(
+      <CampaignDetail
+        campaign={nvdlCampaign}
+        onSaveLifecycle={async () => {
+          throw new Error("Not submitted");
+        }}
+      />,
+    );
+    expect(html.match(/>Roll options<\/button>/g)).toHaveLength(1);
+    expect(render(nvdlCampaign)).not.toContain(">Roll options</button>");
+    expect(
+      renderToStaticMarkup(
+        <CampaignDetail
+          campaign={crwdCampaign}
+          onSaveLifecycle={async () => {
+            throw new Error("Not submitted");
+          }}
+        />,
+      ),
+    ).not.toContain(">Roll options</button>");
+  });
+  it("renders recorded roll chains even without a mutation callback", () => {
+    const linked = {
+      ...nvdlCampaign,
+      positions: nvdlCampaign.positions.map((position, i) => ({
+        ...position,
+        rollChainId: i === 0 ? "chain" : null,
+      })),
+    };
+    expect(text(render(linked))).toContain("Roll chains");
+    expect(text(render(linked))).toContain("Chain cash gross +$1,400.00");
+    expect(text(render(linked))).toContain("Chain cash net +$1,400.00");
+  });
+  it.each([
+    "Position changed. Reload the campaign before another action.",
+    "Lifecycle action was saved, but campaign refresh failed. Reload the campaign before another action.",
+  ])("removes roll and other mutation forms after %s", (message) => {
+    vi.stubGlobal("window", { location: { hash: "#/campaigns/nvdl-campaign" } });
+    vi.spyOn(campaignApi, "useCampaign").mockReturnValue({
+      load: { status: "error", message },
+      retry: vi.fn(),
+      saveMark: vi.fn(),
+      saveLifecycle: vi.fn(),
+    });
+    const html = renderToStaticMarkup(<App />);
+    expect(text(html)).toContain(message);
+    expect(text(html)).toContain("Retry campaign");
+    expect(text(html)).not.toContain("Roll options");
+    expect(text(html)).not.toContain("Record close");
+    expect(text(html)).not.toContain("Save mark");
+  });
+});
+
 describe("Lifecycle integration", () => {
   it("offers an enabled covered call callback while retaining authoritative assignment basis", () => {
     const campaign: CampaignResponse = {

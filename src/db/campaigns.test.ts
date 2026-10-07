@@ -166,6 +166,7 @@ test("reads complete history, assignment and a deterministic manual-priority mar
       price: 20000,
       cash: 30000000,
       fees: -99000,
+      rollId: null,
     },
     {
       id: id(13),
@@ -175,6 +176,7 @@ test("reads complete history, assignment and a deterministic manual-priority mar
       price: 0,
       cash: 0,
       fees: 0,
+      rollId: null,
     },
   ]);
   expect(response.assignments).toEqual([assignment]);
@@ -476,6 +478,7 @@ test("empty accounts and campaigns return null", async () => {
       asOf,
       positions: [],
       assignments: [],
+      rolls: [],
     });
   } finally {
     await empty.client.close();

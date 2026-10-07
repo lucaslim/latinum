@@ -1,0 +1,100 @@
+.roll-panel,
+.roll-form,
+.roll-leg {
+  min-width: 0;
+}
+.roll-form h2 {
+  margin-top: 1rem;
+}
+.roll-panel button {
+  padding: var(--sp-2);
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  font: inherit;
+  cursor: pointer;
+  white-space: normal;
+}
+.roll-panel :disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.roll-panel [role="alert"] {
+  color: var(--debit);
+}
+.roll-form > fieldset,
+.roll-columns > fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.roll-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.roll-form label {
+  display: grid;
+  gap: 0.3rem;
+  margin-block: 0.7rem;
+}
+.roll-form input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: var(--sp-2);
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  font: inherit;
+}
+.roll-leg {
+  border-bottom: 1px solid var(--line);
+  padding-block: 0.6rem;
+}
+.roll-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border: 0;
+  padding: 0;
+  margin-block: 0.8rem;
+}
+.roll-choices button[aria-pressed="true"] {
+  border-color: var(--spread);
+}
+.roll-derived dl > div,
+.roll-timeline dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-block: 0.5rem;
+}
+.roll-derived dd,
+.roll-timeline dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.roll-timeline ol {
+  padding-left: 1.2rem;
+}
+.roll-timeline li {
+  margin-block: 1rem;
+  overflow-wrap: anywhere;
+}
+.roll-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--spread);
+}
+@container app (max-width: 760px) {
+  .roll-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
