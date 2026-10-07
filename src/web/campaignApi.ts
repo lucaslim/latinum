@@ -95,8 +95,8 @@ export function useCampaign(id: string) {
     } catch (error) {
       if (error instanceof LifecycleHttpError && error.status >= 400 && error.status < 500)
         throw error;
-      const message =
-        "Lifecycle action outcome is uncertain. Reload the campaign before another action.";
+      const status = error instanceof LifecycleHttpError ? ` (HTTP ${error.status})` : "";
+      const message = `Lifecycle action outcome is uncertain${status}. Reload the campaign before another action.`;
       if (active.current === request) {
         active.current = null;
         setLoad({ status: "error", message });

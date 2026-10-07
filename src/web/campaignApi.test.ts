@@ -124,7 +124,10 @@ test.each(["lost response", "unreadable success", "server failure"])(
     ).rejects.toThrow("Lifecycle action outcome is uncertain");
     expect(hooks.states[0]).toEqual({
       status: "error",
-      message: "Lifecycle action outcome is uncertain. Reload the campaign before another action.",
+      message:
+        failure === "server failure"
+          ? "Lifecycle action outcome is uncertain (HTTP 502). Reload the campaign before another action."
+          : "Lifecycle action outcome is uncertain. Reload the campaign before another action.",
     });
     await expect(
       actions.saveLifecycle("position", { action: "expire", input: {} }),
