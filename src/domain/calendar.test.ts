@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   businessDte,
+  CalendarCoverageError,
   isEarlyClose,
   isTradingDay,
   lastTradingDayOnOrBefore,
@@ -30,12 +31,14 @@ describe("isTradingDay", () => {
     },
   );
 
-  it("throws once queried past the last year of the table", () => {
-    expect(() => isTradingDay(d("2029-01-02"))).toThrow(RangeError);
-  });
-
-  it("throws before the first year of the table", () => {
-    expect(() => isTradingDay(d("2025-12-31"))).toThrow(RangeError);
+  it.each([
+    ["2029-01-02", 2029],
+    ["2025-12-31", 2025],
+  ])("throws a typed RangeError outside coverage for %s", (date, year) => {
+    const query = () => isTradingDay(d(date));
+    expect(query).toThrow(CalendarCoverageError);
+    expect(query).toThrow(RangeError);
+    expect(query).toThrow(`NYSE calendar covers 2026-2028; add ${year} to src/domain/calendar.ts`);
   });
 });
 
@@ -53,7 +56,7 @@ describe("isEarlyClose", () => {
   });
 
   it("throws past the table", () => {
-    expect(() => isEarlyClose(d("2029-01-02"))).toThrow(RangeError);
+    expect(() => isEarlyClose(d("2029-01-02"))).toThrow(CalendarCoverageError);
   });
 });
 
@@ -72,7 +75,9 @@ describe("business-day DTE", () => {
   });
 
   it("throws when the range runs past the table", () => {
-    expect(() => tradingDaysBetween(d("2028-12-28"), d("2029-01-03"))).toThrow(RangeError);
+    expect(() => tradingDaysBetween(d("2028-12-28"), d("2029-01-03"))).toThrow(
+      CalendarCoverageError,
+    );
   });
 });
 

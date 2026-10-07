@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from "react";
+import { CalendarCoverageError } from "../../domain/calendar.ts";
 import type { IsoDate } from "../../domain/dates.ts";
 import { expiryChips } from "../../domain/expiry.ts";
 import { formatMoney4, type Money4 } from "../../domain/money.ts";
@@ -83,7 +84,14 @@ export function TradeForm({
   const [strategy, setStrategy] = useState<TradeStrategy>("csp");
   const [ticker, setTicker] = useState("");
   const [openedOn, setOpenedOn] = useState<string>(asOf);
-  const chips = expiryChips(asOf);
+  let chips: ReturnType<typeof expiryChips> = [];
+  let calendarUnsupported = false;
+  try {
+    chips = expiryChips(asOf);
+  } catch (cause) {
+    if (!(cause instanceof CalendarCoverageError)) throw cause;
+    calendarUnsupported = true;
+  }
   const [expiry, setExpiry] = useState<string>(chips[0]?.date ?? "");
   const [quantity, setQuantity] = useState("1");
   const [strike, setStrike] = useState("");
@@ -280,6 +288,12 @@ export function TradeForm({
         {stock && <p>Quantity is shares. Stock fees default to zero.</p>}
         {!stock && (
           <>
+            {calendarUnsupported && (
+              <p role="status">
+                NYSE calendar unsupported for these expiry quick choices (coverage: 2026–2028).
+                Enter an expiry date manually.
+              </p>
+            )}
             <fieldset aria-label="Expiry quick choices" className="trade-chips">
               {chips.map((chip) => (
                 <button

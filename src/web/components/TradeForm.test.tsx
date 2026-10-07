@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseIsoDate } from "../../domain/dates.ts";
+import * as expiryModule from "../../domain/expiry.ts";
 import type { Money4 } from "../../domain/money.ts";
 import { positionMetrics } from "../../domain/positions.ts";
 import { STRATEGY_LABELS, TRADE_STRATEGIES } from "../../shared/trade.ts";
@@ -24,8 +25,59 @@ describe("TradeForm", () => {
     expect(html).toContain('value="0.65"');
     expect(html).toContain('aria-label="Expiry quick choices"');
     expect(html).toContain("2026-10-16 M");
+    const quickChoices = html.match(
+      /<fieldset aria-label="Expiry quick choices"[^>]*>(.*?)<\/fieldset>/,
+    )?.[1];
+    expect(quickChoices?.match(/<button /g)).toHaveLength(7);
+    expect(html).not.toContain("NYSE calendar unsupported");
     expect(html.indexOf('value="DRAM"')).toBeLessThan(html.indexOf('value="AAPL"'));
     expect(html).toContain('value="wheel"');
+  });
+
+  it.each(["2028-11-20", "2029-01-02"])(
+    "keeps the Add form and manual expiry usable when quick choices exceed coverage as of %s",
+    (asOf) => {
+      const html = renderToStaticMarkup(
+        <TradeForm
+          asOf={parseIsoDate(asOf)}
+          options={{ tickers: [], tags: [], assignedStock: [] }}
+          onSaved={() => {}}
+          onCancel={() => {}}
+        />,
+      );
+      expect(html).toContain('<form aria-label="Add trade"');
+      expect(html).toContain("<h2>Add trade</h2>");
+      expect(html).toMatch(/<label>Expiry<input type="date"[^>]*value=""/);
+      expect(html).not.toMatch(/<fieldset[^>]*disabled/);
+      for (const strategy of TRADE_STRATEGIES) expect(html).toContain(STRATEGY_LABELS[strategy]);
+      expect(html).toContain(
+        'role="status">NYSE calendar unsupported for these expiry quick choices (coverage: 2026–2028). Enter an expiry date manually.',
+      );
+      expect(html).toMatch(/<fieldset aria-label="Expiry quick choices"[^>]*><\/fieldset>/);
+      expect(html).toContain(">Save trade</button>");
+      expect(html).toContain(">Cancel</button>");
+    },
+  );
+
+  it("does not swallow an unrelated RangeError from quick-choice generation", () => {
+    const error = new RangeError("Unexpected expiry failure");
+    const spy = vi.spyOn(expiryModule, "expiryChips").mockImplementation(() => {
+      throw error;
+    });
+    try {
+      expect(() =>
+        renderToStaticMarkup(
+          <TradeForm
+            asOf={parseIsoDate("2026-09-25")}
+            options={{ tickers: [], tags: [], assignedStock: [] }}
+            onSaved={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ).toThrow(error);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("renders every DRAM gross fixture line from the shared production preview", () => {
