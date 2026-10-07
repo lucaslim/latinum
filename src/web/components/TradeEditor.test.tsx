@@ -61,6 +61,32 @@ describe("manual fill preview", () => {
 });
 
 describe("manual edit variants", () => {
+  it("clears the preview instead of throwing when an edited stock fill exceeds Money4 precision", () => {
+    const stock: OpenPosition = {
+      id: "stock",
+      strategy: "stock",
+      role: "swing",
+      underlying: "CRWD",
+      openedOn: position.openedOn,
+      shares: 2147483647,
+      price: 1 as Money4,
+    };
+    const fill: ManualTrade = {
+      ...trades[0],
+      id: "stock-fill",
+      kind: "stock",
+      side: "long",
+      strike: null,
+      expiry: null,
+      quantity: 2147483647,
+      price: 1 as Money4,
+      fees: 0 as Money4,
+    };
+    expect(previewEditedTrade(stock, [fill], "stock-fill", { price: "99999999" })).toEqual({
+      success: false,
+      errors: ["Amount exceeds Money4 precision"],
+    });
+  });
   it("uses the other current spread leg when editing a fill", () => {
     const spread: OpenPosition = {
       ...position,

@@ -83,6 +83,13 @@ it.each([cc, assignedCall])("uses held or assigned covered-call basis, not strik
   });
 });
 
+it("rejects unsafe metrics after resolving the actual assigned basis", () => {
+  expect(previewTrade(assignedCall, [{ ...assigned, basis: 9007199254740991 as Money4 }])).toEqual({
+    success: false,
+    errors: ["Amount exceeds Money4 precision"],
+  });
+});
+
 it("requires an explicit basis for assigned calls in the request adapter", () => {
   const input = createPositionSchema.parse(assignedCall);
   expect(() => requestToPosition(input)).toThrow("Assigned covered call requires a share basis");

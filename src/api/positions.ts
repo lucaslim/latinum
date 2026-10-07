@@ -4,6 +4,7 @@ import type { WithDb } from "../db/database.ts";
 import { repository } from "../db/repository.ts";
 import { todayNY } from "../domain/dates.ts";
 import type { OpenPositionsResponse } from "../domain/sheet.ts";
+import { bookTotals } from "../domain/totals.ts";
 
 export interface PositionsDeps {
   withDb: WithDb;
@@ -19,6 +20,7 @@ export function positionsRoute({ withDb, now }: PositionsDeps): Handler {
       asOf: todayNY(now()),
       positions: toBookPositions(rows),
     };
+    bookTotals(body.positions);
     c.header("Cache-Control", "private, no-store");
     return c.json(body);
   };

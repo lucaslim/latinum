@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type IsoDate, parseIsoDate } from "../domain/dates.ts";
-import { type Money4, mulMoney4, parseMoney4 } from "../domain/money.ts";
+import { type Money4, Money4RangeError, mulMoney4, parseMoney4 } from "../domain/money.ts";
 import { positionMetrics } from "../domain/positions.ts";
 import { requestToPosition } from "./tradePosition.ts";
 
@@ -114,26 +114,14 @@ export const createPositionSchema = positionShape.superRefine((p, ctx) => {
     issue("Put premium must be below strike");
   if (ctx.issues.length > 0) return;
   const strikes = "short" in p ? [p.short.strike, p.long.strike] : "strike" in p ? [p.strike] : [];
-  if (strikes.some((strike) => !Number.isSafeInteger(mulMoney4(parseMoney4(strike), quantity)))) {
-    issue("Strike exposure exceeds Money4 precision");
-    return;
+  try {
+    for (const strike of strikes) mulMoney4(parseMoney4(strike), quantity);
+    const basis = p.strategy === "cc" ? parseMoney4(p.strike) : undefined;
+    positionMetrics(requestToPosition(p, basis));
+  } catch (error) {
+    if (error instanceof Money4RangeError) issue(error.message);
+    else throw error;
   }
-  const basis = p.strategy === "cc" ? parseMoney4(p.strike) : undefined;
-  const metrics = positionMetrics(requestToPosition(p, basis));
-  const money =
-    metrics.kind === "income"
-      ? [metrics.premium, metrics.collateral, metrics.breakeven, metrics.maxProfit, metrics.maxLoss]
-      : metrics.kind === "debit"
-        ? [
-            metrics.debit,
-            metrics.collateral,
-            metrics.breakeven,
-            metrics.maxLoss,
-            ...(metrics.maxProfit === "unlimited" ? [] : [metrics.maxProfit]),
-          ]
-        : [metrics.collateral];
-  if (money.some((amount) => !Number.isSafeInteger(amount)))
-    issue("Derived amount exceeds Money4 precision");
 });
 
 export const patchTradeSchema = z

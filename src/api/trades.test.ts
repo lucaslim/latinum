@@ -93,6 +93,52 @@ async function book() {
 }
 
 describe("trade HTTP boundary", () => {
+  test("rejects an aggregate overflow atomically even when both positions are individually safe", async () => {
+    const input = { ...dram, quantity: 90001, strike: "99997.7777", price: "0.0001", fees: "0" };
+    expect((await send("/api/positions", "POST", input)).status).toBe(201);
+    const overflow = await send("/api/positions", "POST", input);
+    expect(overflow.status).toBe(400);
+    expect(await counts()).toEqual({ accounts: 1, campaigns: 1, positions: 1, legs: 1, trades: 1 });
+    expect(bookTotals((await book()).positions)).toMatchObject({
+      incomeCollateral: 8999899990777700,
+    });
+  });
+
+  test("rolls back an edit that would overflow deployed capital", async () => {
+    expect(
+      (
+        await send("/api/positions", "POST", {
+          ...dram,
+          quantity: 10000,
+          strike: "899000",
+          price: "0.0001",
+          fees: "0",
+        })
+      ).status,
+    ).toBe(201);
+    const created = await send("/api/positions", "POST", {
+      strategy: "stock",
+      underlying: "CRWD",
+      openedOn: "2026-09-25",
+      shares: 1000000,
+      price: "1000",
+      fees: "0",
+      tags: [],
+    });
+    expect(created.status).toBe(201);
+    const { positionId } = (await created.json()) as CreatePositionResponse;
+    const fill = (await manual(positionId)).trades[0];
+    if (!fill) throw new Error("Missing stock fill");
+    expect((await send(`/api/trades/${fill.id}`, "PATCH", { price: "2000" })).status).toBe(400);
+    expect((await manual(positionId)).trades).toMatchObject([{ price: 10000000 }]);
+    expect(await database.db.select().from(s.trades).where(eq(s.trades.id, fill.id))).toMatchObject(
+      [{ cash: -10000000000000 }],
+    );
+    expect(bookTotals((await book()).positions)).toMatchObject({
+      capitalDeployed: 9000000000000000,
+    });
+  });
+
   test("POST201 and PATCH200 refresh real Sheet rows/totals, with Money4 response values", async () => {
     const response = await send("/api/positions", "POST", dram);
     expect(response.status).toBe(201);

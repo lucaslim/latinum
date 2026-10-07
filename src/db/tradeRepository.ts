@@ -9,6 +9,7 @@ import {
   parseMoney4,
   sumMoney4,
 } from "../domain/money.ts";
+import { bookTotals } from "../domain/totals.ts";
 import { assignedShareBasis } from "../domain/wheel.ts";
 import {
   type AssignedStockOption,
@@ -20,7 +21,9 @@ import {
   type PatchTradeResponse,
   type TradeFormOptions,
 } from "../shared/trade.ts";
+import { toBookPositions } from "./book.ts";
 import type { Database } from "./database.ts";
+import { repository } from "./repository.ts";
 import * as s from "./schema.ts";
 
 export class TradeWriteError extends Error {
@@ -58,6 +61,12 @@ async function accountId(db: Database) {
   if (accounts.length !== 1) throw new Error("Trade entry requires exactly one account");
   const [account] = accounts;
   if (!account) throw new Error("Manual account insert returned no account");
+  // Serializes book-range checks as well as creates against edits, before any position lock.
+  await db
+    .select({ id: s.accounts.id })
+    .from(s.accounts)
+    .where(eq(s.accounts.id, account.id))
+    .for("update");
   return account.id;
 }
 
@@ -362,6 +371,7 @@ export function tradeRepository(db: Database) {
           coveredLegId,
         );
       }
+      bookTotals(toBookPositions(await repository(tx).readOpenBook()));
       return { positionId, campaignId };
     });
   }
@@ -374,6 +384,7 @@ export function tradeRepository(db: Database) {
         .innerJoin(s.legs, eq(s.trades.legId, s.legs.id))
         .where(eq(s.trades.id, id));
       if (!target) throw new TradeWriteError("Trade not found", 404);
+      await accountId(tx);
       const [position] = await tx
         .select()
         .from(s.positions)
@@ -396,22 +407,19 @@ export function tradeRepository(db: Database) {
       if (!trade) throw new TradeWriteError("Trade not found", 404);
       const price = input.price === undefined ? trade.price : parseMoney4(input.price);
       const fees = input.fees === undefined ? trade.fees : negMoney4(parseMoney4(input.fees));
-      const updated = {
-        ...trade,
-        price,
-        fees,
-        cash: mulMoney4(
-          price,
-          trade.quantity * target.leg.multiplier * (target.leg.side === "long" ? -1 : 1),
-        ),
-      };
+      const updated = { ...trade, price, fees };
       // Reuse the create contract rather than relaxing spread, positivity or storage bounds on edit.
       const current = candidate(position, legs, trades);
       const next = candidateInput(current, target.leg, updated);
       const parsed = createPositionSchema.safeParse(next);
       if (!parsed.success)
         throw new TradeWriteError(parsed.error.issues.map((i) => i.message).join("; "), 400);
-      await tx.update(s.trades).set({ price, fees, cash: updated.cash }).where(eq(s.trades.id, id));
+      const cash = mulMoney4(
+        price,
+        trade.quantity * target.leg.multiplier * (target.leg.side === "long" ? -1 : 1),
+      );
+      await tx.update(s.trades).set({ price, fees, cash }).where(eq(s.trades.id, id));
+      bookTotals(toBookPositions(await repository(tx).readOpenBook()));
       return { id };
     });
   }

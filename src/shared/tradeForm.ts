@@ -1,4 +1,4 @@
-import { type Money4, mulMoney4, parseMoney4 } from "../domain/money.ts";
+import { type Money4, Money4RangeError, mulMoney4, parseMoney4 } from "../domain/money.ts";
 import { type Metrics, type Position, positionMetrics } from "../domain/positions.ts";
 import { assignedShareBasis } from "../domain/wheel.ts";
 import {
@@ -45,7 +45,13 @@ export function previewTrade(
     assignedBasis = stock.basis;
   }
   const position = requestToPosition(input, assignedBasis);
-  const metrics = positionMetrics(position);
+  let metrics: Metrics;
+  try {
+    metrics = positionMetrics(position);
+  } catch (error) {
+    if (error instanceof Money4RangeError) return { success: false, errors: [error.message] };
+    throw error;
+  }
   const costBasis =
     position.strategy === "csp"
       ? assignedShareBasis(position.strike, position.price)

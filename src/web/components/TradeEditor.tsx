@@ -5,6 +5,7 @@ import {
   addMoney4,
   divMoney4,
   formatMoney4,
+  Money4RangeError,
   mulMoney4,
   parseMoney4,
   subMoney4,
@@ -28,94 +29,106 @@ export function previewEditedTrade(
   id: string,
   patch: PatchTradeRequest,
 ): TradePreview {
-  const parsed = patchTradeSchema.safeParse(patch);
-  if (!parsed.success) {
-    return { success: false, errors: parsed.error.issues.map((issue) => issue.message) };
-  }
-  const selected = trades.find((trade) => trade.id === id);
-  if (!selected?.editable) return { success: false, errors: ["Choose an editable manual fill"] };
-  const price = parsed.data.price === undefined ? selected.price : parseMoney4(parsed.data.price);
-  const legTrades = trades.filter((trade) => trade.legId === selected.legId);
-  const totalQuantity = legTrades.reduce((sum, trade) => sum + Math.abs(trade.quantity), 0);
-  if (totalQuantity === 0) return { success: false, errors: ["Opening fill has no quantity"] };
-  const delta = divMoney4(
-    mulMoney4(subMoney4(price, selected.price), Math.abs(selected.quantity)),
-    totalQuantity,
-  );
-  const common = {
-    underlying: position.underlying,
-    openedOn: position.openedOn,
-    tags: [],
-    strategy: position.strategy,
-    fees: parsed.data.fees ?? formatMoney4(absMoney4(selected.fees), 4),
-  };
-  if ("shares" in position) {
-    return previewTrade(
-      {
-        ...common,
-        shares: position.shares,
-        price: formatMoney4(addMoney4(position.price, delta), 4),
-      },
-      [],
+  try {
+    const parsed = patchTradeSchema.safeParse(patch);
+    if (!parsed.success) {
+      return { success: false, errors: parsed.error.issues.map((issue) => issue.message) };
+    }
+    const selected = trades.find((trade) => trade.id === id);
+    if (!selected?.editable) return { success: false, errors: ["Choose an editable manual fill"] };
+    const price = parsed.data.price === undefined ? selected.price : parseMoney4(parsed.data.price);
+    const legTrades = trades.filter((trade) => trade.legId === selected.legId);
+    const totalQuantity = legTrades.reduce((sum, trade) => sum + Math.abs(trade.quantity), 0);
+    if (totalQuantity === 0) return { success: false, errors: ["Opening fill has no quantity"] };
+    const delta = divMoney4(
+      mulMoney4(subMoney4(price, selected.price), Math.abs(selected.quantity)),
+      totalQuantity,
     );
-  }
-  const option = {
-    ...common,
-    expiry: position.expiry,
-    quantity: position.qty,
-    adjusted: position.adjusted,
-  };
-  if ("longStrike" in position) {
-    const average = (side: "long" | "short") => {
-      const fills = trades.filter((trade) => trade.kind !== "stock" && trade.side === side);
-      const quantity = fills.reduce((sum, trade) => sum + Math.abs(trade.quantity), 0);
-      if (quantity === 0) return null;
-      return divMoney4(
-        sumMoney4(
-          fills.map((trade) =>
-            mulMoney4(trade.id === id ? price : trade.price, Math.abs(trade.quantity)),
-          ),
-        ),
-        quantity,
-      );
+    const common = {
+      underlying: position.underlying,
+      openedOn: position.openedOn,
+      tags: [],
+      strategy: position.strategy,
+      fees: parsed.data.fees ?? formatMoney4(absMoney4(selected.fees), 4),
     };
-    const long = average("long");
-    const short = average("short");
-    if (long === null || short === null)
-      return { success: false, errors: ["Both spread legs are required for a preview"] };
-    const { fees, ...spread } = option;
+    if ("shares" in position) {
+      return previewTrade(
+        {
+          ...common,
+          shares: position.shares,
+          price: formatMoney4(addMoney4(position.price, delta), 4),
+        },
+        [],
+      );
+    }
+    const option = {
+      ...common,
+      expiry: position.expiry,
+      quantity: position.qty,
+      adjusted: position.adjusted,
+    };
+    if ("longStrike" in position) {
+      const average = (side: "long" | "short") => {
+        const fills = trades.filter((trade) => trade.kind !== "stock" && trade.side === side);
+        const quantity = fills.reduce((sum, trade) => sum + Math.abs(trade.quantity), 0);
+        if (quantity === 0) return null;
+        return divMoney4(
+          sumMoney4(
+            fills.map((trade) =>
+              mulMoney4(trade.id === id ? price : trade.price, Math.abs(trade.quantity)),
+            ),
+          ),
+          quantity,
+        );
+      };
+      const long = average("long");
+      const short = average("short");
+      if (long === null || short === null)
+        return { success: false, errors: ["Both spread legs are required for a preview"] };
+      const { fees, ...spread } = option;
+      return previewTrade(
+        {
+          ...spread,
+          long: {
+            strike: formatMoney4(position.longStrike, 4),
+            price: formatMoney4(long, 4),
+            fees,
+          },
+          short: {
+            strike: formatMoney4(position.shortStrike, 4),
+            price: formatMoney4(short, 4),
+            fees,
+          },
+          ...(position.role === "income" ? {} : { role: position.role }),
+        },
+        [],
+      );
+    }
+    const stockFill = selected.kind === "stock";
     return previewTrade(
       {
-        ...spread,
-        long: { strike: formatMoney4(position.longStrike, 4), price: formatMoney4(long, 4), fees },
-        short: {
-          strike: formatMoney4(position.shortStrike, 4),
-          price: formatMoney4(short, 4),
-          fees,
-        },
+        ...option,
+        strike: formatMoney4(position.strike, 4),
+        price: formatMoney4(stockFill ? position.price : addMoney4(position.price, delta), 4),
+        ...(position.strategy === "cc"
+          ? {
+              cover: {
+                kind: "held",
+                basis: formatMoney4(
+                  stockFill ? addMoney4(position.basis, delta) : position.basis,
+                  4,
+                ),
+              },
+            }
+          : {}),
         ...(position.role === "income" ? {} : { role: position.role }),
       },
       [],
     );
+  } catch (error) {
+    if (error instanceof Money4RangeError) return { success: false, errors: [error.message] };
+    throw error;
   }
-  const stockFill = selected.kind === "stock";
-  return previewTrade(
-    {
-      ...option,
-      strike: formatMoney4(position.strike, 4),
-      price: formatMoney4(stockFill ? position.price : addMoney4(position.price, delta), 4),
-      ...(position.strategy === "cc"
-        ? {
-            cover: {
-              kind: "held",
-              basis: formatMoney4(stockFill ? addMoney4(position.basis, delta) : position.basis, 4),
-            },
-          }
-        : {}),
-      ...(position.role === "income" ? {} : { role: position.role }),
-    },
-    [],
-  );
 }
 
 type Load<T> =

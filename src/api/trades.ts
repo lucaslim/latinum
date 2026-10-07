@@ -1,6 +1,7 @@
 import type { Context, Handler } from "hono";
 import { z } from "zod";
 import { TradeWriteError, tradeRepository } from "../db/tradeRepository.ts";
+import { Money4RangeError } from "../domain/money.ts";
 import { createPositionSchema, patchTradeSchema } from "../shared/trade.ts";
 import type { PositionsDeps } from "./positions.ts";
 
@@ -20,6 +21,7 @@ function route(handle: Handler): Handler {
       return await handle(c, next);
     } catch (error) {
       if (error instanceof TradeWriteError) return c.json({ error: error.message }, error.status);
+      if (error instanceof Money4RangeError) return c.json({ error: error.message }, 400);
       throw error;
     }
   };
