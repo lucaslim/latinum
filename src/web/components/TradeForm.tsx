@@ -5,18 +5,89 @@ import { expiryChips } from "../../domain/expiry.ts";
 import { formatMoney4, type Money4 } from "../../domain/money.ts";
 import type { Metrics } from "../../domain/positions.ts";
 import { tagSuggestions, tickerSuggestions } from "../../shared/symbols.ts";
-import {
-  type AssignedStockOption,
-  STRATEGY_LABELS,
-  TRADE_STRATEGIES,
-  type TradeFormOptions,
-  type TradeStrategy,
-} from "../../shared/trade.ts";
+import type { AssignedStockOption, TradeFormOptions, TradeStrategy } from "../../shared/trade.ts";
 import { defaultFee, previewTrade } from "../../shared/tradeForm.ts";
 import { percent, usd } from "../format.ts";
 import { createTrade } from "../tradeApi.ts";
 import { tradeFormFeedback } from "../tradeFormFeedback.ts";
+import { type ComboOption, SearchCombobox } from "./SearchCombobox.tsx";
 import "./trade-form.css";
+
+const strategies: (ComboOption<TradeStrategy> & { aliases: string })[] = [
+  {
+    value: "csp",
+    label: "Cash-secured put",
+    detail: "CSP",
+    group: "Income",
+    tone: "credit",
+    aliases: "wheel",
+  },
+  {
+    value: "cc",
+    label: "Covered call",
+    detail: "CC",
+    group: "Income",
+    tone: "credit",
+    aliases: "wheel",
+  },
+  {
+    value: "put_credit_spread",
+    label: "Put credit spread",
+    detail: "PCS",
+    group: "Spreads",
+    tone: "credit",
+    aliases: "bull put vertical",
+  },
+  {
+    value: "call_credit_spread",
+    label: "Call credit spread",
+    detail: "CCS",
+    group: "Spreads",
+    tone: "credit",
+    aliases: "bear call vertical",
+  },
+  {
+    value: "put_debit_spread",
+    label: "Put debit spread",
+    detail: "PDS",
+    group: "Spreads",
+    tone: "debit",
+    aliases: "bear put vertical hedge",
+  },
+  {
+    value: "call_debit_spread",
+    label: "Call debit spread",
+    detail: "CDS",
+    group: "Spreads",
+    tone: "debit",
+    aliases: "bull call vertical",
+  },
+  {
+    value: "long_put",
+    label: "Long put",
+    detail: "LP",
+    group: "Directional",
+    tone: "debit",
+    aliases: "hedge",
+  },
+  {
+    value: "long_call",
+    label: "Long call",
+    detail: "LC",
+    group: "Directional",
+    tone: "debit",
+    aliases: "",
+  },
+  { value: "stock", label: "Stock", group: "Stock", aliases: "" },
+  { value: "day_trade", label: "Day trade", group: "Stock", aliases: "" },
+];
+const strategyOptions = (query: string) =>
+  strategies.filter((option) =>
+    `${option.label} ${option.detail ?? ""} ${option.aliases}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
+  );
+const uppercase = (query: string) => query.toUpperCase();
 
 export function DerivedTradeMetrics({
   metrics,
@@ -244,47 +315,47 @@ export function TradeForm({
       <h2>Add trade</h2>
       <div className="trade-ticket">
         <fieldset disabled={saving} className="trade-main">
-          <legend>Strategy</legend>
-          <div className="trade-chips">
-            {TRADE_STRATEGIES.map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={strategy === value}
-                onClick={() => {
-                  if (value === strategy) return;
-                  setStrategy(value);
-                  setPickedRole(null);
-                }}
-              >
-                {STRATEGY_LABELS[value]}
-              </button>
-            ))}
+          <div className="trade-entry-fields">
+            <SearchCombobox
+              label="Strategy"
+              value={strategy}
+              displayValue={
+                strategies.find((option) => option.value === strategy)?.label ?? strategy
+              }
+              options={strategyOptions}
+              onPick={(value) => {
+                if (value === strategy) return;
+                setStrategy(value);
+                setPickedRole(null);
+              }}
+            />
+            <SearchCombobox
+              label="Ticker"
+              value={ticker}
+              displayValue={ticker}
+              freeText={{ normalize: uppercase }}
+              options={(query) => {
+                const symbols = tickerSuggestions(query, options.tickers);
+                const choices: ComboOption<string>[] = symbols.map((value) => ({
+                  value,
+                  label: value,
+                  group: options.tickers.includes(value) ? "In journal" : "Suggestions",
+                }));
+                if (query && !symbols.includes(query))
+                  choices.push({ value: query, label: `Use ${query}`, group: "New symbol" });
+                return choices;
+              }}
+              onPick={(value) => {
+                if (value === ticker) return;
+                setTicker(value);
+                setCover("held");
+              }}
+            />
+            {input(stock ? "Shares" : "Quantity", quantity, setQuantity, "number")}
           </div>
           {strategy === "day_trade" && (
             <p>Long stock day trade. Closing trades are recorded separately.</p>
           )}
-          <div className="trade-fields">
-            <label>
-              Ticker
-              <input
-                value={ticker}
-                list={`${id}-tickers`}
-                autoCapitalize="characters"
-                onChange={(event) => {
-                  setTicker(event.target.value.toUpperCase());
-                  setCover("held");
-                }}
-              />
-            </label>
-            <datalist id={`${id}-tickers`}>
-              {tickerSuggestions(ticker, options.tickers).map((value) => (
-                <option key={value} value={value} />
-              ))}
-            </datalist>
-
-            {input(stock ? "Shares" : "Quantity", quantity, setQuantity, "number")}
-          </div>
           {stock && <p>Quantity is shares. Stock fees default to zero.</p>}
           {!stock && (
             <div className="trade-expiry">

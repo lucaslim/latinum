@@ -124,9 +124,8 @@ test("DRAM assignment opens the real prefilled CC form and saves against the sam
   await expect(offer).toBeEnabled();
   await offer.click();
   const form = page.getByRole("form", { name: "Add trade", exact: true });
-  await expect(form.getByRole("button", { name: "CC", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
+  await expect(form.getByRole("combobox", { name: "Strategy", exact: true })).toHaveValue(
+    "Covered call",
   );
   await expect(form.getByLabel("Ticker", { exact: true })).toHaveValue("DRAM");
   await expect(form.getByLabel("Quantity", { exact: true })).toHaveValue("15");

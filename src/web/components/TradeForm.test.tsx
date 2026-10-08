@@ -83,7 +83,7 @@ describe("TradeForm", () => {
           onCancel={() => {}}
         />,
       );
-      expect(html).toContain('aria-pressed="true">CC</button>');
+      expect(html).toMatch(/<label>Strategy<input[^>]*role="combobox"[^>]*value="Covered call"/);
       expect(html).toMatch(/<label>Ticker<input[^>]*value="DRAM"/);
       expect(html).toMatch(/<label>Quantity<input[^>]*value="15"/);
       expect(html).toContain('<option value="00000000-0000-4000-8000-000000000053" selected="">');
@@ -102,7 +102,7 @@ describe("TradeForm", () => {
         onCancel={() => {}}
       />,
     );
-    for (const strategy of TRADE_STRATEGIES) expect(html).toContain(STRATEGY_LABELS[strategy]);
+    expect(html).toContain('value="Cash-secured put"');
     expect(html).toContain('aria-label="Derived trade metrics"');
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled/);
     expect(html).toContain('value="2026-09-25"');
@@ -114,7 +114,7 @@ describe("TradeForm", () => {
     )?.[1];
     expect(quickChoices?.match(/<button /g)).toHaveLength(8);
     expect(html).not.toContain("NYSE calendar unsupported");
-    expect(html.indexOf('value="DRAM"')).toBeLessThan(html.indexOf('value="AAPL"'));
+    expect(html).toMatch(/<label>Ticker<input[^>]*role="combobox"/);
     expect(html).toContain('value="wheel"');
   });
 
@@ -133,7 +133,7 @@ describe("TradeForm", () => {
       expect(html).toContain("<h2>Add trade</h2>");
       expect(html).toMatch(/<label>Expiry<input type="date"[^>]*value=""/);
       expect(html).not.toMatch(/<fieldset[^>]*disabled/);
-      for (const strategy of TRADE_STRATEGIES) expect(html).toContain(STRATEGY_LABELS[strategy]);
+      expect(html).toContain('value="Cash-secured put"');
       expect(html).toContain(
         `role="status">NYSE calendar unsupported for these expiry quick choices (coverage: ${FIRST_YEAR}–${LAST_YEAR}). Enter an expiry date manually.`,
       );
@@ -252,6 +252,33 @@ const text = (node: ReactNode) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const longStrategyNames = {
+  csp: "Cash-secured put",
+  cc: "Covered call",
+  put_credit_spread: "Put credit spread",
+  call_credit_spread: "Call credit spread",
+  put_debit_spread: "Put debit spread",
+  call_debit_spread: "Call debit spread",
+  long_put: "Long put",
+  long_call: "Long call",
+  stock: "Stock",
+  day_trade: "Day trade",
+};
+function chooseStrategy(render: () => ReactNode, strategy: keyof typeof STRATEGY_LABELS) {
+  const label = elements(render()).find(
+    (el) => el.type === "label" && text(el.props.children) === "Strategy",
+  );
+  const input = elements(label?.props.children).find((el) => el.type === "input");
+  if (!input) throw new Error("Missing Strategy combobox");
+  (input.props.onFocus as (event: unknown) => void)({ target: { select: () => {} } });
+  const option = elements(render()).find(
+    (el) =>
+      el.props.role === "option" && text(el.props.children).startsWith(longStrategyNames[strategy]),
+  );
+  if (!option) throw new Error(`Missing strategy ${strategy}`);
+  (option.props.onClick as () => void)();
+}
+
 describe("TradeForm role default", () => {
   const render = () =>
     expand(
@@ -278,13 +305,7 @@ describe("TradeForm role default", () => {
     const selected = roleControls(render()).find((el) => el.props["aria-pressed"] === true);
     return selected ? text(selected.props.children).toLowerCase() : undefined;
   };
-  const choose = (strategy: keyof typeof STRATEGY_LABELS) => {
-    const chip = elements(render()).find(
-      (el) => el.type === "button" && text(el.props.children) === STRATEGY_LABELS[strategy],
-    );
-    if (!chip) throw new Error(`Missing strategy ${strategy}`);
-    (chip.props.onClick as () => void)();
-  };
+  const choose = (strategy: keyof typeof STRATEGY_LABELS) => chooseStrategy(render, strategy);
   const pickRole = (value: string) => {
     const button = roleControls(render()).find(
       (el) => text(el.props.children).toLowerCase() === value,
@@ -292,10 +313,12 @@ describe("TradeForm role default", () => {
     if (!button) throw new Error("Missing Role button");
     (button.props.onClick as () => void)();
   };
-  const typeInto = (type: "input" | "select" | "textarea", label: string, value: string) =>
+  const typeInto = (type: "input" | "select" | "textarea", label: string, value: string) => {
     (control(render(), type, label).props.onChange as (event: unknown) => void)({
       target: { value },
     });
+    if (label === "Ticker") (control(render(), type, label).props.onBlur as () => void)();
+  };
   const submit = async () => {
     const form = elements(render()).find((el) => el.type === "form");
     if (!form) throw new Error("Missing form");
@@ -397,7 +420,10 @@ describe("TradeForm role default", () => {
     press("Other…");
     typeInto("input", "Expiry", "2026-12-18");
     expect(renderToStaticMarkup(render())).toContain("Selected expiry: 2026-12-18");
+    const focus = vi.fn();
+    (control(render(), "input", "Expiry").props.ref as { current: unknown }).current = { focus };
     press("Other…");
+    expect(focus).toHaveBeenCalledTimes(1);
     expect(control(render(), "input", "Expiry").props.value).toBe("2026-12-18");
     press("10-16 M 21d");
     const html = renderToStaticMarkup(render());
@@ -473,6 +499,80 @@ describe("TradeForm role default", () => {
     });
   });
 
+  it("offers journal tickers first and a new uppercase symbol without changing the committed ticker", () => {
+    const tree = () =>
+      expand(
+        <TradeForm
+          asOf={parseIsoDate("2026-09-25")}
+          options={{ tickers: ["DRAM", "SPY"], tags: [], assignedStock: [] }}
+          onSaved={() => {}}
+          onCancel={() => {}}
+        />,
+      );
+    (control(tree(), "input", "Ticker").props.onFocus as (event: unknown) => void)({
+      target: { select: () => {} },
+    });
+    const popup = elements(tree()).find((el) => el.props.role === "listbox");
+    expect(
+      elements(popup)
+        .filter((el) => el.props.role === "option")
+        .slice(0, 2)
+        .map((el) => text(el.props.children)),
+    ).toEqual(["DRAM", "SPY"]);
+    expect(
+      elements(popup)
+        .filter((el) => el.type === "legend")
+        .map((el) => text(el.props.children)),
+    ).toEqual(["In journal", "Suggestions"]);
+    (control(tree(), "input", "Ticker").props.onChange as (event: unknown) => void)({
+      target: { value: "xyzz" },
+    });
+    const use = elements(tree()).find((el) => el.props.role === "option");
+    expect(text(use?.props.children)).toBe("Use XYZZ");
+    (control(tree(), "input", "Ticker").props.onKeyDown as (event: unknown) => void)({
+      key: "Escape",
+      preventDefault: () => {},
+    });
+    expect(control(tree(), "input", "Ticker").props.value).toBe("");
+  });
+
+  it("resets assigned covered shares only when a different ticker is committed", () => {
+    const assignedStock = {
+      legId: "00000000-0000-4000-8000-000000000053",
+      underlying: "DRAM",
+      uncoveredShares: 1500,
+      basis: 530000 as Money4,
+      assignedOn: parseIsoDate("2026-10-16"),
+    };
+    const tree = () =>
+      expand(
+        <TradeForm
+          asOf={parseIsoDate("2026-10-16")}
+          options={{ tickers: ["DRAM"], tags: [], assignedStock: [assignedStock] }}
+          assignedStock={assignedStock}
+          onSaved={() => {}}
+          onCancel={() => {}}
+        />,
+      );
+    const typeTicker = (value: string) =>
+      (control(tree(), "input", "Ticker").props.onChange as (event: unknown) => void)({
+        target: { value },
+      });
+    typeTicker("QQQ");
+    (control(tree(), "input", "Ticker").props.onKeyDown as (event: unknown) => void)({
+      key: "Escape",
+      preventDefault: () => {},
+    });
+    expect(control(tree(), "select", "Covered shares").props.value).toBe(assignedStock.legId);
+    typeTicker("DRAM");
+    (control(tree(), "input", "Ticker").props.onBlur as () => void)();
+    expect(control(tree(), "select", "Covered shares").props.value).toBe(assignedStock.legId);
+    typeTicker("QQQ");
+    (control(tree(), "input", "Ticker").props.onBlur as () => void)();
+    expect(control(tree(), "select", "Covered shares").props.value).toBe("held");
+    expect(control(tree(), "input", "Ticker").props.value).toBe("QQQ");
+  });
+
   it("omits role for strategies without one", async () => {
     vi.mocked(createTrade).mockResolvedValue(undefined as never);
     typeInto("input", "Ticker", "QQQ");
@@ -510,9 +610,16 @@ describe("TradeForm dirty signal", () => {
     if (!el) throw new Error(`Missing ${type} ${label}`);
     return el;
   };
-  const typeInto = (label: string, value: string) =>
+  const typeInto = (label: string, value: string) => {
     (control("input", label).props.onChange as (event: unknown) => void)({ target: { value } });
+    if (label === "Ticker") (control("input", label).props.onBlur as () => void)();
+  };
   const press = (label: string) => {
+    const strategy = TRADE_STRATEGIES.find((value) => STRATEGY_LABELS[value] === label);
+    if (strategy) {
+      chooseStrategy(render, strategy);
+      return;
+    }
     const button = elements(render()).find(
       (el) => el.type === "button" && text(el.props.children) === label,
     );

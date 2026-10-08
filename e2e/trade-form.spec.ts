@@ -1,5 +1,21 @@
 import { expect, type Page, test } from "@playwright/test";
-import { STRATEGY_LABELS, TRADE_STRATEGIES } from "../src/shared/trade.ts";
+
+const strategyNames = [
+  "Cash-secured put",
+  "Covered call",
+  "Put credit spread",
+  "Call credit spread",
+  "Put debit spread",
+  "Call debit spread",
+  "Long put",
+  "Long call",
+  "Stock",
+  "Day trade",
+];
+async function pickStrategy(page: Page, name: string) {
+  await page.getByRole("combobox", { name: "Strategy", exact: true }).click();
+  await page.getByRole("option", { name: new RegExp(`^${name}(?: |$)`) }).click();
+}
 
 const viewports = [
   { width: 1400, height: 900, sheet: "sheet-table", rows: "tbody tr", footer: "tfoot" },
@@ -43,7 +59,7 @@ async function expectSameDocument(page: Page) {
 }
 
 async function fillDramPut(page: Page) {
-  await page.getByRole("button", { name: "CSP", exact: true }).click();
+  await pickStrategy(page, "Cash-secured put");
   await page.getByLabel("Ticker", { exact: true }).fill("DRAM");
   await page.getByText("Tags, notes, opened date, adjusted contract", { exact: true }).click();
   await page.getByLabel("Opened on", { exact: true }).fill("2026-09-25");
@@ -157,21 +173,31 @@ for (const { width, height, sheet, rows, footer } of viewports) {
       await expect(page.getByText("Selected expiry: 2026-04-17", { exact: true })).toBeVisible();
       await expiryChoices.getByRole("button", { name: "04-02 6d", exact: true }).click();
       await expect(page.getByText("Selected expiry: 2026-04-02", { exact: true })).toBeVisible();
-      const strategies = page
-        .getByRole("group", { name: "Strategy", exact: true })
-        .locator(":scope > .trade-chips")
-        .first();
-      await expect(strategies.getByRole("button", { pressed: true })).toHaveCount(1);
-      await expect(strategies.getByRole("button")).toHaveCount(10);
+      const strategies = page.getByRole("combobox", { name: "Strategy", exact: true });
+      await strategies.click();
+      await expect(
+        page
+          .getByRole("listbox", { name: "Strategy choices" })
+          .getByRole("option", { selected: true }),
+      ).toHaveCount(1);
+      await expect(
+        page.getByRole("listbox", { name: "Strategy choices" }).getByRole("option"),
+      ).toHaveCount(10);
+      await strategies.press("Escape");
       await page.screenshot({ path: `.verify/trade-expiry-${width}.png`, fullPage: true });
-      for (const strategy of TRADE_STRATEGIES) {
-        const chip = page.getByRole("button", { name: STRATEGY_LABELS[strategy], exact: true });
-        await chip.click();
-        await expect(chip).toHaveAttribute("aria-pressed", "true");
-        await expect(strategies.getByRole("button", { pressed: true })).toHaveCount(1);
+      for (const strategy of strategyNames) {
+        await pickStrategy(page, strategy);
+        await expect(strategies).toHaveValue(strategy);
+        await strategies.click();
+        await expect(
+          page
+            .getByRole("listbox", { name: "Strategy choices" })
+            .getByRole("option", { selected: true }),
+        ).toHaveCount(1);
+        await strategies.press("Escape");
         await expectNoOverflow(page);
       }
-      await page.getByRole("button", { name: "CSP", exact: true }).click();
+      await pickStrategy(page, "Cash-secured put");
       await page.getByLabel("Quantity", { exact: true }).fill("10");
       await page.locator(".trade-fee-editor summary").click();
       const fees = page.getByLabel("Fees", { exact: true });
@@ -185,6 +211,43 @@ for (const { width, height, sheet, rows, footer } of viewports) {
   });
 }
 
+test("searchable strategy keyboard selection restores queries and resets Role", async ({
+  page,
+}) => {
+  await page.goto("/#/trades/new");
+  const strategy = page.getByRole("combobox", { name: "Strategy", exact: true });
+  await strategy.fill("bear");
+  await strategy.press("ArrowDown");
+  await strategy.press("ArrowDown");
+  await strategy.press("Enter");
+  await expect(strategy).toHaveValue("Put debit spread");
+  await expect(page.getByRole("button", { name: "Hedge", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "Swing", exact: true }).click();
+  await strategy.fill("LC");
+  await page.getByRole("option", { name: "Long call LC", exact: true }).click();
+  await strategy.fill("bear put");
+  await strategy.press("ArrowDown");
+  await strategy.press("Enter");
+  await expect(page.getByRole("button", { name: "Hedge", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await strategy.fill("wheel");
+  await strategy.press("Escape");
+  await expect(strategy).toHaveValue("Put debit spread");
+  await expect(strategy).toHaveAttribute("aria-expanded", "false");
+  const ticker = page.getByRole("combobox", { name: "Ticker", exact: true });
+  await ticker.fill("xyzz");
+  await page.getByRole("option", { name: "Use XYZZ", exact: true }).click();
+  await expect(ticker).toHaveValue("XYZZ");
+  await ticker.fill("abc");
+  await ticker.press("Escape");
+  await expect(ticker).toHaveValue("XYZZ");
+});
+
 for (const width of [1280, 390]) {
   test.describe(`Order ticket at ${width}px`, () => {
     test.use({ viewport: { width, height: 1000 } });
@@ -197,7 +260,7 @@ for (const width of [1280, 390]) {
       const form = page.getByRole("form", { name: "Add trade" });
       await expect(form).toContainText("Needs ticker, strike, fill");
       await expect(form).not.toContainText("Invalid string");
-      await page.getByRole("button", { name: "Put debit spread", exact: true }).click();
+      await pickStrategy(page, "Put debit spread");
       await expect(form).toContainText("Needs ticker, strikes, fills");
       await page.getByLabel("Ticker", { exact: true }).fill("SPY");
       await page.getByLabel("Long strike", { exact: true }).fill("730");
@@ -223,7 +286,7 @@ for (const width of [1280, 390]) {
       else expect(summary.y).toBeGreaterThan(main.y + main.height);
       await expectNoOverflow(page);
 
-      await page.getByRole("button", { name: "CSP", exact: true }).click();
+      await pickStrategy(page, "Cash-secured put");
       await page.getByLabel("Ticker", { exact: true }).fill("DRAM");
       await page.getByLabel("Quantity", { exact: true }).fill("10");
       await page.getByLabel("Strike", { exact: true }).fill("50");
