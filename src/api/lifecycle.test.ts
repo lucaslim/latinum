@@ -10,6 +10,7 @@ import type { CampaignResponse } from "../domain/campaign.ts";
 import { buildCampaignView } from "../domain/campaignMetrics.ts";
 import { parseMoney4 as m } from "../domain/money.ts";
 import { createApp } from "./app.ts";
+import { noSession } from "./testGuard.ts";
 
 let database: Awaited<ReturnType<typeof testDatabase>>;
 let app: ReturnType<typeof createApp>;
@@ -23,6 +24,7 @@ beforeAll(async () => {
   assert(account);
   accountId = account.id;
   app = createApp({
+    guard: noSession,
     withDb: (use) => use(database.db),
     now: () => new Date("2026-10-17T03:30:00Z"),
   });
@@ -195,6 +197,7 @@ test.each(["close", "expire", "assign", "link-hedge"] as const)(
   "%s requires a well-formed lowercase observed revision before opening a connection",
   async (action) => {
     const noDb = createApp({
+      guard: noSession,
       withDb: async () => {
         throw new Error("must not connect");
       },
@@ -663,6 +666,7 @@ test("malformed JSON and invalid/unknown ids have400/404 boundary responses", as
 
 test("database failure propagates to500 rather than conflict or validation", async () => {
   const broken = createApp({
+    guard: noSession,
     withDb: async () => {
       throw new Error("DB unavailable");
     },

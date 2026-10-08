@@ -57,6 +57,7 @@ export default defineConfig({
         "src/api/rolls.ts",
         "src/contracts/**/*.ts",
         "src/api/lifecycle.ts",
+        "src/api/auth.ts",
         "src/ops/*.ts",
       ],
       reporter: ["text", "lcov", "json-summary"],

@@ -6,6 +6,7 @@ import { testDatabase } from "../db/test/database.ts";
 import { parseMoney4 as m } from "../domain/money.ts";
 import type { MonthlyPnlResponse } from "../domain/monthlyPnlTypes.ts";
 import { createApp } from "./app.ts";
+import { noSession } from "./testGuard.ts";
 
 const accountId = "30000000-0000-4000-8000-000000000001";
 const campaignId = "30000000-0000-4000-8000-000000000002";
@@ -60,7 +61,7 @@ describe("GET /api/pl/monthly", () => {
           },
         ],
       });
-      const app = createApp({ withDb: (use) => use(db), now });
+      const app = createApp({ guard: noSession, withDb: (use) => use(db), now });
       const res = await app.request("/api/pl/monthly");
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe("private, no-store");
@@ -114,7 +115,7 @@ describe("GET /api/pl/monthly", () => {
   it("requires no query parameters and returns an empty book before seeding", async () => {
     const { db, client } = await testDatabase();
     try {
-      const app = createApp({ withDb: (use) => use(db), now });
+      const app = createApp({ guard: noSession, withDb: (use) => use(db), now });
       const res = await app.request("/api/pl/monthly");
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe("private, no-store");
@@ -134,7 +135,7 @@ describe("GET /api/pl/monthly", () => {
         { label: "one", broker: "manual" },
         { label: "two", broker: "manual" },
       ]);
-      const app = createApp({ withDb: (use) => use(db), now });
+      const app = createApp({ guard: noSession, withDb: (use) => use(db), now });
       app.onError((error, c) => c.json({ error: error.message }, 500));
       const res = await app.request("/api/pl/monthly");
       expect(res.status).toBe(500);
@@ -150,7 +151,7 @@ describe("GET /api/pl/monthly", () => {
     const { db, client } = await testDatabase();
     try {
       await seedBook(db);
-      const app = createApp({ withDb: (use) => use(db), now });
+      const app = createApp({ guard: noSession, withDb: (use) => use(db), now });
       const res = await app.request("/api/pl/monthly");
       expect(res.status).toBe(200);
       const body = (await res.json()) as MonthlyPnlResponse;

@@ -22,22 +22,36 @@ pnpm exec playwright install chromium   # once, for e2e
 | `pnpm build`     | Typecheck, then `vite build` to `dist/`                             |
 | `pnpm e2e`       | `vite build`, then Playwright against `vite preview` and a local API |
 | `pnpm verify`    | The whole CI gate, then screenshots in `.verify/` (see `docs/verify.md`) |
+| `pnpm auth:hash` | Reads a password on stdin and prints its `AUTH_PASSWORD_HASH` value |
 
 `API_PORT` overrides the API port for `pnpm dev`. The local API serves the prototype book from
 an in-memory PGlite that is migrated and seeded on every start; production reads Neon through
 `DATABASE_URL`, one pool per request.
 
+## Login
+
+The app owns its login: one password, then a signed `__Host-session` cookie (HttpOnly, Secure,
+SameSite=Lax) that lasts 90 days and renews every time the app opens. Every `/api` route except
+`/api/health`, `/api/cron/heartbeat` (its own bearer) and `/api/auth/*` returns 401 without it.
+The static shell is public and holds no journal data.
+
+Production needs two Vercel env vars:
+
+- `AUTH_PASSWORD_HASH`: `read -rs pw && printf '%s' "$pw" | pnpm -s auth:hash`
+- `SESSION_SECRET`: `openssl rand -base64 32`. Rotating it logs every device out.
+
+If either is missing, login fails with a 500 rather than letting requests through. The local
+API (`pnpm dev`, e2e) uses the password `journal` unless `AUTH_PASSWORD_HASH` is set.
+
 ## Platform checks
 
 ```sh
-scripts/smoke.sh https://trading-journal-r8lqy6j1u-lucaslims-projects-af1d1be4.vercel.app
+scripts/smoke.sh https://<production-domain>
 ```
 
-The URL came from the successful GitHub Production deployment's `environment_url`.
-Every deployment URL, including older ones, sits behind the same Vercel Authentication.
-The script checks anonymous GET and HEAD on `/` and `/api/health`, without cookies
-or redirect following. Only the observed 302 redirect to `https://vercel.com/sso-api`
-passes; application responses and transport errors fail.
+The script sends anonymous GET and HEAD requests without cookies or redirect following:
+`/api/positions` and `/api/export` must return 401, `/api/health` 200, and
+`/api/auth/session` 401. Any other status, or a transport error, fails.
 
 The installable manifest uses credentialed fetching, and its `start_url` is `/` so the
 installed app always starts on the origin it was installed from. The service worker caches static assets only and excludes `/api/` navigation.

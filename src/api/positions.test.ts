@@ -8,13 +8,14 @@ import type { OpenPositionsResponse } from "../domain/sheet.ts";
 import { prototypeBook } from "../domain/test/fixtures.ts";
 import { bookTotals } from "../domain/totals.ts";
 import { createApp } from "./app.ts";
+import { noSession } from "./testGuard.ts";
 
 const now = new Date("2026-10-02T03:30:00Z");
 
 async function appOn(setup: (db: Awaited<ReturnType<typeof testDatabase>>["db"]) => Promise<void>) {
   const { db, client } = await testDatabase();
   await setup(db);
-  return { app: createApp({ withDb: (use) => use(db), now: () => now }), client };
+  return { app: createApp({ guard: noSession, withDb: (use) => use(db), now: () => now }), client };
 }
 
 describe("GET /api/positions?status=open", () => {

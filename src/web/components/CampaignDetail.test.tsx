@@ -38,7 +38,7 @@ describe("Hash routes", () => {
       saveMark: vi.fn(),
       saveLifecycle: vi.fn(),
     });
-    const html = renderToStaticMarkup(<App />);
+    const html = renderToStaticMarkup(<App onLogOut={() => {}} />);
     expect(text(html)).toContain("Position changed. Reload the campaign before another action.");
     expect(text(html)).toContain("Retry campaign");
     expect(html).not.toContain("lifecycle-actions");
@@ -53,7 +53,7 @@ describe("Hash routes", () => {
       saveMark: vi.fn(),
       saveLifecycle: vi.fn(),
     });
-    const html = renderToStaticMarkup(<App />);
+    const html = renderToStaticMarkup(<App onLogOut={() => {}} />);
     expect(html).toContain('<p role="alert">Could not load campaign (HTTP 404)</p>');
     expect(text(html)).toContain("Retry campaign");
     expect(text(html)).toContain("Back to positions");
@@ -67,7 +67,7 @@ describe("Hash routes", () => {
       saveMark: vi.fn(),
       saveLifecycle: vi.fn(),
     });
-    const html = renderToStaticMarkup(<App />);
+    const html = renderToStaticMarkup(<App onLogOut={() => {}} />);
     expect(html).toContain("AAPL long call campaign");
     expect(text(html)).toContain("Unrealized P/L −$270");
     expect(html).not.toContain('data-testid="sheet-table"');
@@ -76,14 +76,14 @@ describe("Hash routes", () => {
     vi.stubGlobal("window", {
       location: { hash: "#/campaigns/00000000-0000-4000-8000-000000000001" },
     });
-    const html = renderToStaticMarkup(<App />);
+    const html = renderToStaticMarkup(<App onLogOut={() => {}} />);
     expect(text(html)).toContain("Loading campaign…");
     expect(text(html)).not.toContain("Loading positions…");
     expect(html).toContain('href="#/"');
   });
   it("opens the positions hash in the Sheet loading state", () => {
     vi.stubGlobal("window", { location: { hash: "#/" } });
-    const html = renderToStaticMarkup(<App />);
+    const html = renderToStaticMarkup(<App onLogOut={() => {}} />);
     expect(text(html)).toContain("Loading positions…");
     expect(html).toContain('href="#/"');
   });
@@ -171,7 +171,7 @@ describe("Roll integration", () => {
       saveMark: vi.fn(),
       saveLifecycle: vi.fn(),
     });
-    const html = renderToStaticMarkup(<App />);
+    const html = renderToStaticMarkup(<App onLogOut={() => {}} />);
     expect(text(html)).toContain(message);
     expect(text(html)).toContain("Retry campaign");
     expect(text(html)).not.toContain("Roll options");

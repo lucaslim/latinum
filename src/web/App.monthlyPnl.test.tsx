@@ -10,7 +10,7 @@ afterEach(() => {
 
 test("the monthly hash opens its dashboard instead of the positions Sheet", () => {
   vi.stubGlobal("window", { location: { hash: "#/pl" } });
-  const html = renderToStaticMarkup(<App />);
+  const html = renderToStaticMarkup(<App onLogOut={() => {}} />);
   expect(html).toContain("Loading monthly P/L");
   expect(html).not.toContain("Loading positions");
   expect(html).toContain('href="#/pl" aria-current="page"');

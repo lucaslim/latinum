@@ -281,7 +281,7 @@ function CampaignRoute({ id }: { id: string }) {
   );
 }
 
-export function App() {
+export function App({ onLogOut }: { onLogOut: () => void }) {
   const [hash, setHash] = useState(() => window.location.hash);
   const dirtyRef = useRef(false);
   // The entry the rendered route belongs to, and the hash whose prompt was already answered.
@@ -401,6 +401,16 @@ export function App() {
             </a>
           </nav>
           <ThemeSelect />
+          <button
+            type="button"
+            className="log-out"
+            onClick={() => {
+              if (dirtyRef.current && !window.confirm(DISCARD_PROMPT)) return;
+              onLogOut();
+            }}
+          >
+            Log out
+          </button>
         </header>
         <main className="main">
           <DownloadExport />

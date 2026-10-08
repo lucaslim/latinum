@@ -6,6 +6,7 @@ import * as s from "../db/schema.ts";
 import { testDatabase } from "../db/test/database.ts";
 import { qqqFixture } from "../db/test/rollFixture.ts";
 import { createApp } from "./app.ts";
+import { noSession } from "./testGuard.ts";
 
 let database: Awaited<ReturnType<typeof testDatabase>>;
 beforeAll(async () => {
@@ -25,7 +26,7 @@ const request = (body: unknown) => ({
 });
 
 test("POST /rolls returns lifecycle and metrics, no-store, and reused observed revision is409", async () => {
-  const app = createApp({ withDb: (use) => use(database.db), now });
+  const app = createApp({ guard: noSession, withDb: (use) => use(database.db), now });
   const f = await qqqFixture(database.db);
   const response = await app.request("/api/rolls", request(f.raw));
   expect(response.status).toBe(200);
@@ -49,6 +50,7 @@ test("POST /rolls returns lifecycle and metrics, no-store, and reused observed r
 test("invalid JSON/body parses before withDb and uses NY today", async () => {
   let connected = 0;
   const app = createApp({
+    guard: noSession,
     withDb: async () => {
       connected++;
       throw new Error("must not connect");
@@ -77,7 +79,7 @@ test("invalid JSON/body parses before withDb and uses NY today", async () => {
 });
 
 test("unknown position is404 and invalid later expiry is400 without changed revision", async () => {
-  const app = createApp({ withDb: (use) => use(database.db), now });
+  const app = createApp({ guard: noSession, withDb: (use) => use(database.db), now });
   const f = await qqqFixture(database.db);
   expect(
     (await app.request("/api/rolls", request({ ...f.raw, positionId: randomUUID() }))).status,
@@ -95,7 +97,7 @@ test("unknown position is404 and invalid later expiry is400 without changed revi
 test("book conflicts return409 rather than500", async () => {
   const f = await qqqFixture(database.db);
   await database.db.insert(s.accounts).values({ label: "Other", broker: "manual" });
-  const app = createApp({ withDb: (use) => use(database.db), now });
+  const app = createApp({ guard: noSession, withDb: (use) => use(database.db), now });
   const response = await app.request("/api/rolls", request(f.raw));
   expect(response.status).toBe(409);
   expect(await response.json()).toEqual({ error: "Roll requires a single account" });
@@ -104,6 +106,7 @@ test("book conflicts return409 rather than500", async () => {
 test("unexpected database errors remain500", async () => {
   const f = await qqqFixture(database.db);
   const app = createApp({
+    guard: noSession,
     withDb: async () => {
       throw new Error("DB unavailable");
     },

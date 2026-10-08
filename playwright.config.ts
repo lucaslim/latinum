@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { STORAGE_STATE } from "./e2e/global-setup.ts";
 
 const port = Number(process.env.E2E_WEB_PORT ?? 4173);
 const apiPort = Number(process.env.E2E_API_PORT ?? 8788);
@@ -10,7 +11,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
-  use: { baseURL: `http://localhost:${port}` },
+  globalSetup: "./e2e/global-setup.ts",
+  use: { baseURL: `http://localhost:${port}`, storageState: STORAGE_STATE },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {

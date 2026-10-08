@@ -11,6 +11,7 @@ import type { CampaignResponse } from "../domain/campaign.ts";
 import { buildCampaignView } from "../domain/campaignMetrics.ts";
 import { formatMoney4, parseMoney4 as m } from "../domain/money.ts";
 import { createApp } from "./app.ts";
+import { noSession } from "./testGuard.ts";
 
 const now = new Date("2026-10-02T03:30:00Z");
 let database: Awaited<ReturnType<typeof testDatabase>>;
@@ -163,7 +164,7 @@ beforeAll(async () => {
   assert(incomeLeg);
   incomeLegId = incomeLeg.id;
   dramId = await wheel(db);
-  app = createApp({ withDb: (use) => use(db), now: () => now });
+  app = createApp({ guard: noSession, withDb: (use) => use(db), now: () => now });
 }, 20_000);
 afterAll(async () => {
   await database.client.close();
@@ -468,6 +469,7 @@ test.each([
 
 test("database failures propagate to the application error boundary", async () => {
   const broken = createApp({
+    guard: noSession,
     withDb: async () => {
       throw new Error("DB unavailable");
     },

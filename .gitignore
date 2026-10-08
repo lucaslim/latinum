@@ -11,3 +11,4 @@ test-results
 .pglite*
 .vitest
 .verify
+e2e/.auth/

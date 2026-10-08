@@ -1,5 +1,6 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { withNeon } from "../db/neon.ts";
+import { authRoutes, requireSession } from "./auth.ts";
 import { campaignRoute, manualMarkRoute } from "./campaigns.ts";
 import { heartbeatRoute } from "./cron.ts";
 import { exportRoute } from "./export.ts";
@@ -15,11 +16,19 @@ import {
   tradeFormOptionsRoute,
 } from "./trades.ts";
 
-export function createApp(deps: PositionsDeps) {
+export type AppDeps = PositionsDeps & {
+  /** Runs before every route registered after it; the deployed app uses `requireSession`. */
+  guard: MiddlewareHandler;
+};
+
+export function createApp(deps: AppDeps) {
   const app = new Hono().basePath("/api");
 
+  // Public: health for probes, cron behind its own bearer, and the login routes themselves.
   app.get("/health", (c) => c.json({ ok: true }));
   app.get("/cron/heartbeat", heartbeatRoute(neonHeartbeatWriter));
+  app.route("/auth", authRoutes(deps.now));
+  app.use(deps.guard);
   app.get("/positions", positionsRoute(deps));
   app.get("/campaigns/:id", campaignRoute(deps));
   app.put("/legs/:id/mark", manualMarkRoute(deps));
@@ -37,4 +46,5 @@ export function createApp(deps: PositionsDeps) {
   return app;
 }
 
-export const app = createApp({ withDb: withNeon, now: () => new Date() });
+const now = () => new Date();
+export const app = createApp({ withDb: withNeon, now, guard: requireSession(now) });

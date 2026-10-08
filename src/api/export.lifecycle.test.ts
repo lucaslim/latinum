@@ -11,6 +11,7 @@ import { restoreExport } from "../db/test/restore-export.ts";
 import type { CampaignResponse } from "../domain/campaign.ts";
 import { parseMoney4 as m } from "../domain/money.ts";
 import { createApp } from "./app.ts";
+import { noSession } from "./testGuard.ts";
 
 const rawColumns = [
   "id",
@@ -39,6 +40,7 @@ beforeAll(async () => {
   assert(account);
   accountId = account.id;
   app = createApp({
+    guard: noSession,
     withDb: (use) => use(database.db),
     now: () => new Date("2026-10-17T03:30:00Z"),
   });
@@ -197,6 +199,7 @@ test("lifecycle exports plan P/L, leaves opens blank and restores unchanged raw 
   try {
     await restoreExport(restored.db, backup);
     const restoredApp = createApp({
+      guard: noSession,
       withDb: (use) => use(restored.db),
       now: () => new Date("2026-10-17T03:30:00Z"),
     });
