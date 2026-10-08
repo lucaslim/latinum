@@ -176,12 +176,12 @@ test("a stale retry snapshot preserves the revision and rejects a second close a
     {
       expectedRevision: revision,
       tradeDate: "2026-10-16",
-      fills: [expect.objectContaining({ quantity: 5, price: "0", fees: "0" })],
+      fills: [expect.objectContaining({ quantity: 5, price: "0", fees: "-6.5000" })],
     },
     {
       expectedRevision: revision,
       tradeDate: "2026-10-16",
-      fills: [expect.objectContaining({ quantity: 5, price: "0", fees: "0" })],
+      fills: [expect.objectContaining({ quantity: 5, price: "0", fees: "-6.5000" })],
     },
   ]);
 

@@ -176,11 +176,11 @@ describe("Lifecycle revisions", () => {
       state.values = [{ action, legId }, [legId], false, null];
       const fields = new Map([
         ["tradeDate", "2026-10-16"],
-        ["fees", "0"],
+        ["fees", "2.00"],
         ["campaignId", "target"],
         [`quantity-${legId}`, "5"],
         [`price-${legId}`, "0.40"],
-        [`fees-${legId}`, "-1.30"],
+        [`fees-${legId}`, "1.30"],
       ]);
       vi.stubGlobal(
         "FormData",
@@ -199,16 +199,45 @@ describe("Lifecycle revisions", () => {
           ? {
               expectedRevision: "R0",
               tradeDate: "2026-10-16",
-              fills: [{ legId, quantity: 5, price: "0.40", fees: "-1.30" }],
+              fills: [{ legId, quantity: 5, price: "0.40", fees: "-1.3000" }],
             }
           : action === "expire"
             ? { expectedRevision: "R0", tradeDate: "2026-10-16" }
             : action === "assign"
-              ? { expectedRevision: "R0", tradeDate: "2026-10-16", legId, fees: "0" }
+              ? { expectedRevision: "R0", tradeDate: "2026-10-16", legId, fees: "-2.0000" }
               : { expectedRevision: "R0", campaignId: "target" };
       expect(onSave).toHaveBeenCalledExactlyOnceWith(position.id, { action, input });
     },
   );
+
+  function findInputs(node: ReactNode, found: Record<string, unknown>[] = []) {
+    if (Array.isArray(node)) {
+      for (const child of node) findInputs(child, found);
+    } else if (isValidElement<{ children?: ReactNode }>(node)) {
+      if (node.type === "input") found.push(node.props as Record<string, unknown>);
+      findInputs(node.props.children, found);
+    }
+    return found;
+  }
+
+  it("defaults close fees to $0.65 per open contract and assignment fees to zero", () => {
+    const fixture = nvdlCampaign.positions[0];
+    const leg = fixture?.legs[0];
+    if (!fixture || !leg) throw new Error("Missing lifecycle fixture");
+    const render = (action: "close" | "assign") => {
+      state.values = [{ action, legId: leg.id }, [leg.id], false, null];
+      return findInputs(LifecycleActions({ position: fixture, onSave: vi.fn() }));
+    };
+    const closeFees = render("close").find((input) => input.name === `fees-${leg.id}`);
+    const assignFees = render("assign").find((input) => input.name === "fees");
+    expect(closeFees?.defaultValue).toBe("3.25");
+    expect(assignFees?.defaultValue).toBe("0");
+    for (const input of [closeFees, assignFees]) {
+      const accepts = (value: string) => new RegExp(`^(?:${String(input?.pattern)})$`).test(value);
+      expect(accepts("1.30")).toBe(true);
+      expect(accepts("-1.30")).toBe(false);
+    }
+  });
 
   it.each([
     ["stale_revision", "stale_revision"],

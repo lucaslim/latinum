@@ -55,6 +55,7 @@ test("partial close of five MUU contracts refreshes without reload and books pro
   await page.getByRole("button", { name: "Close MUU position", exact: true }).click();
   await page.getByLabel("Quantity for MUU short put 25.00", { exact: true }).fill("5");
   await page.getByLabel("Close price for MUU short put 25.00", { exact: true }).fill("0");
+  await page.getByLabel("Close fees (charge) for MUU short put 25.00", { exact: true }).fill("0");
   await page.getByLabel("Trade date", { exact: true }).fill("2026-10-16");
   const saved = page.waitForResponse((response) =>
     response.url().endsWith(`/positions/${fixtures.muu.positionId}/close`),
@@ -72,7 +73,9 @@ test("SPXL close records both fees and the $537.40 net fixture", async ({ page }
   await page.goto(`/#/campaigns/${fixtures.spxl.campaignId}`);
   await page.getByRole("button", { name: "Close SPXL position", exact: true }).click();
   await page.getByLabel("Close price for SPXL short put 240.00", { exact: true }).fill("0.4000");
-  await page.getByLabel("Close fees for SPXL short put 240.00", { exact: true }).fill("-1.30");
+  await page
+    .getByLabel("Close fees (charge) for SPXL short put 240.00", { exact: true })
+    .fill("1.30");
   await page.getByLabel("Trade date", { exact: true }).fill("2026-10-16");
   await page.getByRole("button", { name: "Record close", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Realized net P/L +$537.40");
@@ -340,10 +343,12 @@ test("per-leg spread close rejects an unbalanced remainder and records both fill
   await page.getByRole("button", { name: "Close NVDA position", exact: true }).click();
   await page.getByLabel("Include NVDA short put 8.00", { exact: true }).uncheck();
   await page.getByLabel("Close price for NVDA long put 10.00", { exact: true }).fill("1.00");
+  await page.getByLabel("Close fees (charge) for NVDA long put 10.00", { exact: true }).fill("0");
   await page.getByLabel("Trade date", { exact: true }).fill("2026-10-16");
   await page.getByRole("button", { name: "Record close", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("HTTP 400");
   await page.getByLabel("Include NVDA short put 8.00", { exact: true }).check();
+  await page.getByLabel("Close fees (charge) for NVDA short put 8.00", { exact: true }).fill("0");
   await page.getByLabel("Close price for NVDA short put 8.00", { exact: true }).fill("0.10");
   await page.getByRole("button", { name: "Record close", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Realized net P/L −$128.00");

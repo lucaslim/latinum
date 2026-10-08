@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CampaignLeg, CampaignPosition } from "../../domain/campaign.ts";
 import { openLegQuantity } from "../../domain/campaignMetrics.ts";
 import { formatMoney4 } from "../../domain/money.ts";
+import { defaultFee, feeToApi } from "../fees.ts";
 import type { LifecycleMutation, SaveLifecycle } from "../lifecycleApi.ts";
 import "./lifecycle.css";
 
@@ -102,7 +103,7 @@ export function LifecycleActions({
                         legId: leg.id,
                         quantity: Number(form.get(`quantity-${leg.id}`)),
                         price: String(form.get(`price-${leg.id}`)),
-                        fees: String(form.get(`fees-${leg.id}`)),
+                        fees: feeToApi(String(form.get(`fees-${leg.id}`))),
                       })),
                   },
                 };
@@ -113,7 +114,7 @@ export function LifecycleActions({
               case "assign":
                 mutation = {
                   action: "assign",
-                  input: { ...date, legId: mode.legId, fees: String(form.get("fees")) },
+                  input: { ...date, legId: mode.legId, fees: feeToApi(String(form.get("fees"))) },
                 };
                 break;
               case "link-hedge":
@@ -202,13 +203,13 @@ export function LifecycleActions({
                         />
                       </label>
                       <label>
-                        Close fees for {legName(leg)}
+                        Close fees (charge) for {legName(leg)}
                         <input
                           name={`fees-${leg.id}`}
                           type="text"
                           inputMode="decimal"
-                          pattern="-?[0-9]+(\.[0-9]{1,4})?"
-                          defaultValue="0"
+                          pattern="[0-9]+(\.[0-9]{1,4})?"
+                          defaultValue={defaultFee(openLegQuantity(leg))}
                           required
                         />
                       </label>
@@ -230,12 +231,12 @@ export function LifecycleActions({
                   subtracts gross put premium.
                 </p>
                 <label>
-                  Assignment fees
+                  Assignment fees (charge)
                   <input
                     name="fees"
                     type="text"
                     inputMode="decimal"
-                    pattern="-?[0-9]+(\.[0-9]{1,4})?"
+                    pattern="[0-9]+(\.[0-9]{1,4})?"
                     defaultValue="0"
                     required
                   />
