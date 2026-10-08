@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { seedBook } from "../db/seed.ts";
 import { testDatabase } from "../db/test/database.ts";
 import { createApp, app as deployedApp } from "./app.ts";
@@ -24,11 +24,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function guardedApp() {
-  const { db, client } = await testDatabase();
-  await seedBook(db);
-  const app = createApp({ withDb: (use) => use(db), now, guard: requireSession(now) });
-  return { app, client };
+// One read-only book for the file: a PGlite boot per test can outrun the test timeout on CI.
+let database: Awaited<ReturnType<typeof testDatabase>>;
+beforeAll(async () => {
+  database = await testDatabase();
+  await seedBook(database.db);
+});
+afterAll(() => database.client.close());
+
+function guardedApp() {
+  return createApp({ withDb: (use) => use(database.db), now, guard: requireSession(now) });
 }
 
 function login(app: ReturnType<typeof createApp>, password: unknown) {
@@ -85,123 +90,89 @@ describe("deployed app", () => {
 
 describe("login session", () => {
   it("issues a 90-day host-only cookie that unlocks the journal", async () => {
-    const { app, client } = await guardedApp();
-    try {
-      const res = await login(app, "correct horse");
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ok: true });
-      const setCookie = res.headers.get("Set-Cookie") ?? "";
-      expect(setCookie).toMatch(/^__Host-session=[^;]+;/);
-      expect(setCookie).toContain(`Max-Age=${NINETY_DAYS_S}`);
-      expect(setCookie).toContain("Path=/");
-      expect(setCookie).toContain("HttpOnly");
-      expect(setCookie).toContain("Secure");
-      expect(setCookie).toContain("SameSite=Lax");
+    const app = guardedApp();
+    const res = await login(app, "correct horse");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    const setCookie = res.headers.get("Set-Cookie") ?? "";
+    expect(setCookie).toMatch(/^__Host-session=[^;]+;/);
+    expect(setCookie).toContain(`Max-Age=${NINETY_DAYS_S}`);
+    expect(setCookie).toContain("Path=/");
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("Secure");
+    expect(setCookie).toContain("SameSite=Lax");
 
-      const positions = await app.request("/api/positions?status=open", {
-        headers: { Cookie: sessionCookie(res) },
-      });
-      expect(positions.status).toBe(200);
-    } finally {
-      await client.close();
-    }
+    const positions = await app.request("/api/positions?status=open", {
+      headers: { Cookie: sessionCookie(res) },
+    });
+    expect(positions.status).toBe(200);
   });
 
   it.each(["wrong", "", 42, undefined])("rejects password %s without a cookie", async (pw) => {
-    const { app, client } = await guardedApp();
-    try {
-      const res = await login(app, pw);
-      expect(res.status).toBe(401);
-      expect(res.headers.get("Set-Cookie")).toBeNull();
-    } finally {
-      await client.close();
-    }
+    const app = guardedApp();
+    const res = await login(app, pw);
+    expect(res.status).toBe(401);
+    expect(res.headers.get("Set-Cookie")).toBeNull();
   });
 
   it("rejects a tampered cookie", async () => {
-    const { app, client } = await guardedApp();
-    try {
-      const cookie = sessionCookie(await login(app, "correct horse"));
-      const [name, value = ""] = cookie.split("=", 2);
-      const [payload] = decodeURIComponent(value).split(".");
-      const forged = `${name}=${encodeURIComponent(`${Number(payload) + 1}.${"A".repeat(43)}=`)}`;
-      const res = await app.request("/api/pl/monthly", { headers: { Cookie: forged } });
-      expect(res.status).toBe(401);
-    } finally {
-      await client.close();
-    }
+    const app = guardedApp();
+    const cookie = sessionCookie(await login(app, "correct horse"));
+    const [name, value = ""] = cookie.split("=", 2);
+    const [payload] = decodeURIComponent(value).split(".");
+    const forged = `${name}=${encodeURIComponent(`${Number(payload) + 1}.${"A".repeat(43)}=`)}`;
+    const res = await app.request("/api/pl/monthly", { headers: { Cookie: forged } });
+    expect(res.status).toBe(401);
   });
 
   it("rejects a cookie signed with a rotated secret", async () => {
-    const { app, client } = await guardedApp();
-    try {
-      const cookie = sessionCookie(await login(app, "correct horse"));
-      vi.stubEnv("SESSION_SECRET", "a-different-secret-after-rotation");
-      const res = await app.request("/api/pl/monthly", { headers: { Cookie: cookie } });
-      expect(res.status).toBe(401);
-    } finally {
-      await client.close();
-    }
+    const app = guardedApp();
+    const cookie = sessionCookie(await login(app, "correct horse"));
+    vi.stubEnv("SESSION_SECRET", "a-different-secret-after-rotation");
+    const res = await app.request("/api/pl/monthly", { headers: { Cookie: cookie } });
+    expect(res.status).toBe(401);
   });
 
   it("expires after 90 days even if the browser keeps the cookie", async () => {
-    const { app, client } = await guardedApp();
-    try {
-      const cookie = sessionCookie(await login(app, "correct horse"));
-      clock = new Date(clock.getTime() + NINETY_DAYS_S * 1000 - 1);
-      expect((await app.request("/api/pl/monthly", { headers: { Cookie: cookie } })).status).toBe(
-        200,
-      );
-      clock = new Date(clock.getTime() + 1);
-      expect((await app.request("/api/pl/monthly", { headers: { Cookie: cookie } })).status).toBe(
-        401,
-      );
-    } finally {
-      await client.close();
-    }
+    const app = guardedApp();
+    const cookie = sessionCookie(await login(app, "correct horse"));
+    clock = new Date(clock.getTime() + NINETY_DAYS_S * 1000 - 1);
+    expect((await app.request("/api/pl/monthly", { headers: { Cookie: cookie } })).status).toBe(
+      200,
+    );
+    clock = new Date(clock.getTime() + 1);
+    expect((await app.request("/api/pl/monthly", { headers: { Cookie: cookie } })).status).toBe(
+      401,
+    );
   });
 
   it("renews the session when the app checks it", async () => {
-    const { app, client } = await guardedApp();
-    try {
-      const first = sessionCookie(await login(app, "correct horse"));
-      clock = new Date(clock.getTime() + 80 * 86_400_000);
-      const check = await app.request("/api/auth/session", { headers: { Cookie: first } });
-      expect(check.status).toBe(200);
-      const renewed = sessionCookie(check);
-      expect(renewed).toMatch(/^__Host-session=/);
+    const app = guardedApp();
+    const first = sessionCookie(await login(app, "correct horse"));
+    clock = new Date(clock.getTime() + 80 * 86_400_000);
+    const check = await app.request("/api/auth/session", { headers: { Cookie: first } });
+    expect(check.status).toBe(200);
+    const renewed = sessionCookie(check);
+    expect(renewed).toMatch(/^__Host-session=/);
 
-      clock = new Date(clock.getTime() + 20 * 86_400_000);
-      expect((await app.request("/api/pl/monthly", { headers: { Cookie: first } })).status).toBe(
-        401,
-      );
-      expect((await app.request("/api/pl/monthly", { headers: { Cookie: renewed } })).status).toBe(
-        200,
-      );
-    } finally {
-      await client.close();
-    }
+    clock = new Date(clock.getTime() + 20 * 86_400_000);
+    expect((await app.request("/api/pl/monthly", { headers: { Cookie: first } })).status).toBe(401);
+    expect((await app.request("/api/pl/monthly", { headers: { Cookie: renewed } })).status).toBe(
+      200,
+    );
   });
 
   it("logout clears the cookie", async () => {
-    const { app, client } = await guardedApp();
-    try {
-      const res = await app.request("/api/auth/logout", { method: "POST" });
-      expect(res.status).toBe(200);
-      expect(res.headers.get("Set-Cookie")).toMatch(/^__Host-session=; Max-Age=0;/);
-    } finally {
-      await client.close();
-    }
+    const app = guardedApp();
+    const res = await app.request("/api/auth/logout", { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Set-Cookie")).toMatch(/^__Host-session=; Max-Age=0;/);
   });
 
   it("rejects a malformed login body", async () => {
-    const { app, client } = await guardedApp();
-    try {
-      const res = await app.request("/api/auth/login", { method: "POST", body: "{" });
-      expect(res.status).toBe(400);
-    } finally {
-      await client.close();
-    }
+    const app = guardedApp();
+    const res = await app.request("/api/auth/login", { method: "POST", body: "{" });
+    expect(res.status).toBe(400);
   });
 });
 
@@ -212,13 +183,9 @@ describe("hashPassword", () => {
     expect(await hashPassword("a new password")).not.toBe(hash);
 
     vi.stubEnv("AUTH_PASSWORD_HASH", hash);
-    const { app, client } = await guardedApp();
-    try {
-      expect((await login(app, "a new password")).status).toBe(200);
-      expect((await login(app, "correct horse")).status).toBe(401);
-    } finally {
-      await client.close();
-    }
+    const app = guardedApp();
+    expect((await login(app, "a new password")).status).toBe(200);
+    expect((await login(app, "correct horse")).status).toBe(401);
   });
 
   it("refuses a malformed stored hash instead of treating it as a mismatch", async () => {
