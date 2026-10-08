@@ -222,7 +222,6 @@ for (const width of [1280, 390]) {
       if (width === 1280) expect(summary.x).toBeGreaterThan(main.x + main.width);
       else expect(summary.y).toBeGreaterThan(main.y + main.height);
       await expectNoOverflow(page);
-      await page.screenshot({ path: `/tmp/u4a-put-debit-spread-${width}.png`, fullPage: true });
 
       await page.getByRole("button", { name: "CSP", exact: true }).click();
       await page.getByLabel("Ticker", { exact: true }).fill("DRAM");
@@ -236,7 +235,6 @@ for (const width of [1280, 390]) {
       );
       await expect(page.getByRole("button", { name: "Save trade", exact: true })).toBeEnabled();
       await expectNoOverflow(page);
-      await page.screenshot({ path: `/tmp/u4a-csp-${width}.png`, fullPage: true });
     });
   });
 }

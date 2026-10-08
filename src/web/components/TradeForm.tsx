@@ -100,6 +100,7 @@ export function TradeForm({
   }
   const [expiry, setExpiry] = useState<string>(chips[0]?.date ?? "");
   const [otherExpiry, setOtherExpiry] = useState(false);
+  const expiryInput = useRef<HTMLInputElement>(null);
   const [quantity, setQuantity] = useState(
     assignedStock ? String(Math.floor(assignedStock.uncoveredShares / 100)) : "1",
   );
@@ -299,7 +300,7 @@ export function TradeForm({
                   <button
                     type="button"
                     key={chip.date}
-                    aria-pressed={expiry === chip.date}
+                    aria-pressed={!customExpiry && expiry === chip.date}
                     onClick={() => {
                       setExpiry(chip.date);
                       setOtherExpiry(false);
@@ -312,12 +313,25 @@ export function TradeForm({
                 <button
                   type="button"
                   aria-pressed={customExpiry}
-                  onClick={() => setOtherExpiry(!otherExpiry)}
+                  onClick={() => {
+                    if (chips.some((chip) => chip.date === expiry)) setOtherExpiry(!otherExpiry);
+                    else expiryInput.current?.focus();
+                  }}
                 >
                   Other…
                 </button>
               </fieldset>
-              {customExpiry && input("Expiry", expiry, setExpiry, "date")}
+              {customExpiry && (
+                <label>
+                  Expiry
+                  <input
+                    ref={expiryInput}
+                    type="date"
+                    value={expiry}
+                    onChange={(event) => setExpiry(event.target.value)}
+                  />
+                </label>
+              )}
               <p className="note">Selected expiry: {expiry || "Choose a date"}</p>
             </div>
           )}
@@ -377,16 +391,19 @@ export function TradeForm({
             <div className="trade-fee-line">
               <span>
                 Fees{" "}
-                {spread && (longFees !== null || shortFees !== null)
-                  ? `$${longFees ?? feeDefault} / $${shortFees ?? feeDefault} (long / short)`
-                  : `$${spread ? feeDefault : (fees ?? feeDefault)}${spread ? " per leg" : ""}`}
+                {feeDefault === "" && fees === null && longFees === null && shortFees === null
+                  ? ""
+                  : spread && (longFees !== null || shortFees !== null)
+                    ? `$${longFees ?? feeDefault} / $${shortFees ?? feeDefault} (long / short)`
+                    : `$${spread ? feeDefault : (fees ?? feeDefault)}${spread ? " per leg" : ""}`}
                 {!stock &&
+                  feeDefault !== "" &&
                   (spread ? longFees === null && shortFees === null : fees === null) &&
                   ` (0.65 × ${quantity})`}{" "}
                 ·{" "}
               </span>
               <details className="trade-fee-editor">
-                <summary>Edit</summary>
+                <summary aria-label="Edit fees">Edit</summary>
                 <div className="trade-fields">
                   {spread ? (
                     <>
@@ -402,6 +419,7 @@ export function TradeForm({
             {hasRole && (
               <div className="trade-role">
                 <fieldset aria-label="Role" className="trade-segment">
+                  <legend>Role</legend>
                   {(["hedge", "swing"] as const).map((value) => (
                     <button
                       key={value}

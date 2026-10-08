@@ -358,6 +358,34 @@ describe("TradeForm role default", () => {
     expect(renderToStaticMarkup(render())).toContain("Fees $1.23");
   });
 
+  it("shows a visible label naming the Role group", () => {
+    choose("long_put");
+    const group = elements(render()).find(
+      (el) => el.type === "fieldset" && el.props["aria-label"] === "Role",
+    );
+    expect(
+      elements(group?.props.children)
+        .filter((el) => el.type === "legend")
+        .map((el) => text(el.props.children)),
+    ).toEqual(["Role"]);
+  });
+
+  it("presses exactly one expiry choice while the editor is open", () => {
+    const button = elements(render()).find(
+      (el) => el.type === "button" && text(el.props.children) === "Other…",
+    );
+    if (!button) throw new Error("Missing Other expiry");
+    (button.props.onClick as () => void)();
+    const group = elements(render()).find(
+      (el) => el.props["aria-label"] === "Expiry quick choices",
+    );
+    expect(
+      elements(group?.props.children)
+        .filter((el) => el.props["aria-pressed"] === true)
+        .map((el) => text(el.props.children)),
+    ).toEqual(["Other…"]);
+  });
+
   it("reveals manual expiry and always displays an off-chip selection", () => {
     const press = (name: string) => {
       const button = elements(render()).find(
