@@ -30,6 +30,7 @@ export function LifecycleActions({
   // Closing quantity per leg once the user has typed a valid one; an edited fee stops following it.
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [editedFees, setEditedFees] = useState<Record<string, string>>({});
+  const [formVersion, setFormVersion] = useState(0);
   const inFlight = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -49,6 +50,7 @@ export function LifecycleActions({
       : [];
   function choose(next: Mode) {
     setMode(next);
+    setFormVersion((version) => version + 1);
     setIncluded(openLegs.map((leg) => leg.id));
     setError(null);
     setQuantities({});
@@ -87,7 +89,7 @@ export function LifecycleActions({
       </div>
       {mode && (
         <form
-          key={`${mode.action}${mode.action === "assign" ? mode.legId : ""}`}
+          key={formVersion}
           onSubmit={async (event) => {
             event.preventDefault();
             if (inFlight.current) return;
@@ -95,44 +97,44 @@ export function LifecycleActions({
             const tradeDate = String(form.get("tradeDate") ?? "");
             const observed = { expectedRevision: position.revision };
             const date = tradeDate ? { ...observed, tradeDate } : observed;
-            let mutation: LifecycleMutation;
-            switch (mode.action) {
-              case "close":
-                mutation = {
-                  action: "close",
-                  input: {
-                    ...date,
-                    fills: openLegs
-                      .filter((leg) => included.includes(leg.id))
-                      .map((leg) => ({
-                        legId: leg.id,
-                        quantity: Number(form.get(`quantity-${leg.id}`)),
-                        price: String(form.get(`price-${leg.id}`)),
-                        fees: feeToApi(String(form.get(`fees-${leg.id}`))),
-                      })),
-                  },
-                };
-                break;
-              case "expire":
-                mutation = { action: "expire", input: date };
-                break;
-              case "assign":
-                mutation = {
-                  action: "assign",
-                  input: { ...date, legId: mode.legId, fees: feeToApi(String(form.get("fees"))) },
-                };
-                break;
-              case "link-hedge":
-                mutation = {
-                  action: "link-hedge",
-                  input: { ...observed, campaignId: String(form.get("campaignId")) },
-                };
-                break;
-            }
-            inFlight.current = true;
-            setPending(true);
-            setError(null);
             try {
+              let mutation: LifecycleMutation;
+              switch (mode.action) {
+                case "close":
+                  mutation = {
+                    action: "close",
+                    input: {
+                      ...date,
+                      fills: openLegs
+                        .filter((leg) => included.includes(leg.id))
+                        .map((leg) => ({
+                          legId: leg.id,
+                          quantity: Number(form.get(`quantity-${leg.id}`)),
+                          price: String(form.get(`price-${leg.id}`)),
+                          fees: feeToApi(String(form.get(`fees-${leg.id}`))),
+                        })),
+                    },
+                  };
+                  break;
+                case "expire":
+                  mutation = { action: "expire", input: date };
+                  break;
+                case "assign":
+                  mutation = {
+                    action: "assign",
+                    input: { ...date, legId: mode.legId, fees: feeToApi(String(form.get("fees"))) },
+                  };
+                  break;
+                case "link-hedge":
+                  mutation = {
+                    action: "link-hedge",
+                    input: { ...observed, campaignId: String(form.get("campaignId")) },
+                  };
+                  break;
+              }
+              inFlight.current = true;
+              setPending(true);
+              setError(null);
               await onSave(position.id, mutation);
               if (mounted.current) setMode(null);
             } catch (failure: unknown) {
@@ -226,7 +228,7 @@ export function LifecycleActions({
                           pattern="[0-9]+(\.[0-9]{1,4})?"
                           value={
                             editedFees[leg.id] ??
-                            defaultFeeInput(quantities[leg.id] ?? openLegQuantity(leg))
+                            defaultFeeInput(leg.kind, quantities[leg.id] ?? openLegQuantity(leg))
                           }
                           onChange={(event) =>
                             setEditedFees((current) => ({

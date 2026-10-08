@@ -128,6 +128,15 @@ describe("SearchCombobox", () => {
     expect(input().props["aria-activedescendant"]).toBe("combo-option-1");
   });
 
+  it("closes Strategy on Enter after focus without changing its selection", () => {
+    value = "call";
+    focus();
+    key("Enter");
+    expect(onPick).toHaveBeenCalledTimes(0);
+    expect(input().props.value).toBe("Long call");
+    expect(input().props["aria-expanded"]).toBe(false);
+  });
+
   it("picks the first filtered strategy result without an arrow", () => {
     type("call");
     key("Enter");

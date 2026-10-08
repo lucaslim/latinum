@@ -89,9 +89,10 @@ export function SearchCombobox<Value extends string>({
               );
             } else if (event.key === "Enter" && open) {
               event.preventDefault();
-              if (freeText && active < 0) {
-                if (query !== null) pick(freeText.normalize(query));
-                else close();
+              if (active < 0 && query === null) {
+                close();
+              } else if (freeText && active < 0 && query !== null) {
+                pick(freeText.normalize(query));
               } else {
                 const option = choices[active < 0 ? 0 : active];
                 if (option) pick(option.value);

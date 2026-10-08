@@ -1,4 +1,5 @@
 import { isValidElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { nvdlCampaign } from "../../domain/test/campaignFixtures.ts";
 import { LifecycleActions } from "./LifecycleActions.tsx";
@@ -250,6 +251,65 @@ describe("Lifecycle revisions", () => {
       expect(accepts("-1.30")).toBe(false);
     }
   });
+
+  it("defaults closing 100 stock shares to zero rather than an option contract fee", () => {
+    const fixture = nvdlCampaign.positions[0];
+    const leg = fixture?.legs[0];
+    if (!fixture || !leg) throw new Error("Missing lifecycle fixture");
+    const stock = {
+      ...leg,
+      kind: "stock" as const,
+      strike: null,
+      expiry: null,
+      multiplier: 1,
+      trades: leg.trades.map((trade) => ({ ...trade, quantity: 100 })),
+    };
+    state.values = [{ action: "close" }, [leg.id], false, null];
+    state.index = 0;
+    const inputs = findInputs(
+      LifecycleActions({ position: { ...fixture, legs: [stock] }, onSave: vi.fn() }),
+    );
+    expect(inputs.find((input) => input.name === `quantity-${leg.id}`)?.defaultValue).toBe(100);
+    expect(inputs.find((input) => input.name === `fees-${leg.id}`)?.value).toBe("0.00");
+  });
+
+  it.each(["close", "assign"] as const)(
+    "%s shows fee conversion errors without saving or leaving the form pending",
+    async (action) => {
+      const position = nvdlCampaign.positions[0];
+      const leg = position?.legs[0];
+      if (!position || !leg) throw new Error("Missing lifecycle fixture");
+      state.values = [{ action, legId: leg.id }, [leg.id], false, null];
+      const render = () => {
+        state.index = 0;
+        return LifecycleActions({ position, onSave });
+      };
+      const onSave = vi.fn();
+      const fields = new Map([
+        ["fees", "1000000000000"],
+        [`quantity-${leg.id}`, "5"],
+        [`price-${leg.id}`, "0.40"],
+        [`fees-${leg.id}`, "1000000000000"],
+      ]);
+      vi.stubGlobal(
+        "FormData",
+        class {
+          get(name: string) {
+            return fields.get(name);
+          }
+        },
+      );
+      const submit = findSubmit(render());
+      if (!submit) throw new Error("Missing lifecycle form");
+      await submit({ preventDefault: vi.fn(), currentTarget: {} });
+      expect(onSave).toHaveBeenCalledTimes(0);
+      const html = renderToStaticMarkup(render());
+      expect(html).toContain('role="alert"');
+      expect(html).toContain("USD amount out of range: 1000000000000");
+      expect(html).not.toContain('role="status"');
+      expect(html).not.toContain('disabled=""');
+    },
+  );
 
   it("makes an unedited close fee follow the closing quantity until the fee is typed in", () => {
     const fixture = nvdlCampaign.positions[0];

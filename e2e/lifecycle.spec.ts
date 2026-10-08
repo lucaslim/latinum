@@ -69,6 +69,22 @@ test("partial close of five MUU contracts refreshes without reload and books pro
   );
 });
 
+test("choosing Close again rebuilds the quantity, price and fee defaults", async ({ page }) => {
+  await page.goto(`/#/campaigns/${fixtures.muu.campaignId}`);
+  const chooseClose = page.getByRole("button", { name: "Close MUU position", exact: true });
+  await chooseClose.click();
+  const quantity = page.getByLabel("Quantity for MUU short put 25.00", { exact: true });
+  const price = page.getByLabel("Close price for MUU short put 25.00", { exact: true });
+  const fees = page.getByLabel("Close fees (charge) for MUU short put 25.00", { exact: true });
+  await quantity.fill("2");
+  await price.fill("0.40");
+  await expect(fees).toHaveValue("1.30");
+  await chooseClose.click();
+  await expect(quantity).toHaveValue("10");
+  await expect(price).toHaveValue("");
+  await expect(fees).toHaveValue("6.50");
+});
+
 test("SPXL close records both fees and the $537.40 net fixture", async ({ page }) => {
   await page.goto(`/#/campaigns/${fixtures.spxl.campaignId}`);
   await page.getByRole("button", { name: "Close SPXL position", exact: true }).click();

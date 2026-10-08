@@ -39,7 +39,7 @@ function initialFills(position: CampaignPosition): FillFields[] {
     const entry = leg.trades.findLast((trade) => trade.action === "open")?.price;
     if (entry === undefined || leg.strike === null)
       throw new Error("Option has no opening price or strike");
-    const fee = defaultFeeInput(openLegQuantity(leg));
+    const fee = defaultFeeInput(leg.kind, openLegQuantity(leg));
     return {
       legId: leg.id,
       closePrice: formatMoney4(leg.mark?.price ?? entry),

@@ -1,3 +1,4 @@
+import type { CampaignLeg } from "../domain/campaign.ts";
 import { formatMoney4, negMoney4, parseMoney4 } from "../domain/money.ts";
 import { defaultFee } from "../shared/tradeForm.ts";
 
@@ -8,5 +9,5 @@ export function feeToApi(charge: string): string {
   return formatMoney4(negMoney4(money));
 }
 
-export const defaultFeeInput = (contracts: number): string =>
-  formatMoney4(defaultFee(contracts), 2);
+export const defaultFeeInput = (kind: CampaignLeg["kind"], quantity: number): string =>
+  kind === "stock" ? "0.00" : formatMoney4(defaultFee(quantity), 2);

@@ -15,9 +15,11 @@ describe("fees", () => {
   });
 
   it.each([
-    [1, "0.65"],
-    [10, "6.50"],
-  ])("defaults %i contracts to %s", (contracts, expected) => {
-    expect(defaultFeeInput(contracts)).toBe(expected);
+    ["put", 1, "0.65"],
+    ["put", 5, "3.25"],
+    ["call", 10, "6.50"],
+    ["stock", 100, "0.00"],
+  ] as const)("defaults %s quantity %i to %s", (kind, quantity, expected) => {
+    expect(defaultFeeInput(kind, quantity)).toBe(expected);
   });
 });
