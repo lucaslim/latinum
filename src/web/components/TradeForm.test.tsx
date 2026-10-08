@@ -381,6 +381,25 @@ describe("TradeForm role default", () => {
     expect(renderToStaticMarkup(render())).toContain("Fees $1.23");
   });
 
+  it.each(["", "0", "-1", "1.5", "2147483648"])(
+    "omits the default fee for invalid quantity %s",
+    (quantity) => {
+      typeInto("input", "Quantity", quantity);
+      const line = elements(render()).find((el) => el.props.className === "trade-fee-line");
+      const html = renderToStaticMarkup(line);
+      expect(html).not.toContain("$0.00");
+      expect(html).not.toContain("(0.65 ×");
+      expect(html).not.toContain("Fees  ");
+      expect(text(line)).toBe("Fees · Edit Fees");
+      expect(control(render(), "input", "Fees").props.value).toBe("");
+    },
+  );
+
+  it("names the fee editor Edit fees", () => {
+    const summary = elements(render()).find((el) => el.type === "summary" && text(el) === "Edit");
+    expect(summary?.props["aria-label"]).toBe("Edit fees");
+  });
+
   it("shows a visible label naming the Role group", () => {
     choose("long_put");
     const group = elements(render()).find(
@@ -450,6 +469,21 @@ describe("TradeForm role default", () => {
     await submit();
     expect(createTrade).toHaveBeenCalledWith(
       expect.objectContaining({ strategy: "long_call", role: "hedge" }),
+    );
+  });
+
+  it("submits the current ticker draft instead of the previously committed ticker", async () => {
+    vi.mocked(createTrade).mockClear();
+    vi.mocked(createTrade).mockResolvedValue(undefined as never);
+    typeInto("input", "Ticker", "SPY");
+    typeInto("input", "Strike", "50");
+    typeInto("input", "Fill price", "1.85");
+    (control(render(), "input", "Ticker").props.onChange as (event: unknown) => void)({
+      target: { value: "nvda" },
+    });
+    await submit();
+    expect(createTrade).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ underlying: "NVDA" }),
     );
   });
 
@@ -628,6 +662,27 @@ describe("TradeForm dirty signal", () => {
   };
 
   beforeEach(() => onDirtyChange.mockReset());
+
+  it("tracks an uncommitted ticker draft immediately and restores clean on Escape", () => {
+    (control("input", "Ticker").props.onChange as (event: unknown) => void)({
+      target: { value: "nvda" },
+    });
+    expect(reported()).toBe(true);
+    expect(control("input", "Ticker").props.value).toBe("NVDA");
+    (control("input", "Ticker").props.onKeyDown as (event: unknown) => void)({
+      key: "Escape",
+      preventDefault: () => {},
+    });
+    expect(reported()).toBe(false);
+    expect(control("input", "Ticker").props.value).toBe("");
+  });
+
+  it("keeps a strategy search query pristine", () => {
+    (control("input", "Strategy").props.onChange as (event: unknown) => void)({
+      target: { value: "bear" },
+    });
+    expect(reported()).toBe(false);
+  });
 
   it("reports a pristine form as not dirty", () => {
     expect(reported()).toBe(false);

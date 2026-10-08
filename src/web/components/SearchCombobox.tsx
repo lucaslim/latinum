@@ -22,7 +22,10 @@ export function SearchCombobox<Value extends string>({
   displayValue: string;
   options: (query: string) => ComboOption<Value>[];
   onPick: (value: Value) => void;
-  freeText?: { normalize: (query: string) => Value };
+  freeText?: {
+    normalize: (query: string) => Value;
+    onQueryChange?: (query: Value | null) => void;
+  };
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -37,6 +40,7 @@ export function SearchCombobox<Value extends string>({
   const close = () => {
     setOpen(false);
     setQuery(null);
+    freeText?.onQueryChange?.(null);
     setActive(-1);
   };
   const pick = (next: Value) => {
@@ -50,7 +54,7 @@ export function SearchCombobox<Value extends string>({
         <input
           role="combobox"
           aria-expanded={open}
-          aria-controls={`${id}-list`}
+          aria-controls={open ? `${id}-list` : undefined}
           aria-autocomplete="list"
           aria-activedescendant={open && choices[active] ? `${id}-option-${active}` : undefined}
           autoComplete="off"
@@ -62,7 +66,9 @@ export function SearchCombobox<Value extends string>({
           }}
           onClick={() => setOpen(true)}
           onChange={(event) => {
-            setQuery(freeText ? freeText.normalize(event.target.value) : event.target.value);
+            const next = freeText ? freeText.normalize(event.target.value) : event.target.value;
+            setQuery(next);
+            if (freeText) freeText.onQueryChange?.(freeText.normalize(event.target.value));
             setActive(-1);
             setOpen(true);
           }}
@@ -83,9 +89,13 @@ export function SearchCombobox<Value extends string>({
               );
             } else if (event.key === "Enter" && open) {
               event.preventDefault();
-              const option = choices[active < 0 ? 0 : active];
-              if (option) pick(option.value);
-              else if (freeText && query !== null) pick(freeText.normalize(query));
+              if (freeText && active < 0) {
+                if (query !== null) pick(freeText.normalize(query));
+                else close();
+              } else {
+                const option = choices[active < 0 ? 0 : active];
+                if (option) pick(option.value);
+              }
             } else if (event.key === "Escape") {
               event.preventDefault();
               close();
@@ -99,6 +109,7 @@ export function SearchCombobox<Value extends string>({
           role="listbox"
           aria-label={`${label} choices`}
           className="combo-popup"
+          onMouseDown={(event) => event.preventDefault()}
         >
           {groups.map((group, groupIndex) => (
             <fieldset key={group} aria-labelledby={`${id}-group-${groupIndex}`}>
@@ -108,18 +119,15 @@ export function SearchCombobox<Value extends string>({
               {choices.map(
                 (option, index) =>
                   option.group === group && (
+                    // biome-ignore lint/a11y/useFocusableInteractive: Combobox focus stays on the input with aria-activedescendant.
+                    // biome-ignore lint/a11y/useKeyWithClickEvents: The input handles option selection with Arrow keys and Enter.
                     <div
                       key={option.value}
                       id={`${id}-option-${index}`}
                       role="option"
-                      tabIndex={-1}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") pick(option.value);
-                      }}
                       aria-selected={option.value === value}
                       ref={active === index ? activeOption : undefined}
                       className={`combo-option${active === index ? " combo-active" : ""}`}
-                      onMouseDown={(event) => event.preventDefault()}
                       onClick={() => pick(option.value)}
                     >
                       <span className={option.tone ? `combo-${option.tone}` : undefined}>

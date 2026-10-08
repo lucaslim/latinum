@@ -128,7 +128,7 @@ describe("SearchCombobox", () => {
     expect(input().props["aria-activedescendant"]).toBe("combo-option-1");
   });
 
-  it("picks the first filtered result without an arrow", () => {
+  it("picks the first filtered strategy result without an arrow", () => {
     type("call");
     key("Enter");
     expect(onPick).toHaveBeenCalledWith("call");
@@ -156,10 +156,12 @@ describe("SearchCombobox", () => {
 
   it("prevents mouse blur before picking an option", () => {
     focus();
-    const option = elements(render()).find((el) => el.props.id === "combo-option-2");
-    if (!option) throw new Error("Missing Stock option");
+    const tree = render();
+    const option = elements(tree).find((el) => el.props.id === "combo-option-2");
+    const popup = elements(tree).find((el) => el.props.role === "listbox");
+    if (!option || !popup) throw new Error("Missing Stock option or popup");
     const preventDefault = vi.fn();
-    (option.props.onMouseDown as (event: unknown) => void)({ preventDefault });
+    (popup.props.onMouseDown as (event: unknown) => void)({ preventDefault });
     expect(preventDefault).toHaveBeenCalledTimes(1);
     (option.props.onClick as () => void)();
     call("onBlur");
@@ -167,14 +169,12 @@ describe("SearchCombobox", () => {
     expect(input().props.value).toBe("Stock");
   });
 
-  it("supports Enter if an option is programmatically focused", () => {
+  it("only associates the input with an existing popup", () => {
+    expect(input().props["aria-controls"]).toBe(undefined);
     focus();
-    const option = elements(render()).find((el) => el.props.id === "combo-option-2");
-    if (!option) throw new Error("Missing Stock option");
-    (option.props.onKeyDown as (event: unknown) => void)({ key: "Space" });
-    expect(onPick).toHaveBeenCalledTimes(0);
-    (option.props.onKeyDown as (event: unknown) => void)({ key: "Enter" });
-    expect(onPick).toHaveBeenCalledWith("stock");
+    expect(input().props["aria-controls"]).toBe("combo-list");
+    key("Escape");
+    expect(input().props["aria-controls"]).toBe(undefined);
   });
 
   it("has no active descendant for empty results", () => {
@@ -201,6 +201,29 @@ describe("SearchCombobox", () => {
     expect(onPick.mock.calls).toEqual([["DRAM"]]);
     call("onBlur", undefined, true);
     expect(onPick).toHaveBeenCalledTimes(1);
+  });
+
+  it("commits typed free text with Enter rather than the first suggestion", () => {
+    type("l", true);
+    key("Enter", true);
+    expect(onPick.mock.calls).toEqual([["L"]]);
+    expect(input(true).props.value).toBe("L");
+  });
+
+  it("picks an arrow-highlighted suggestion with Enter for free text", () => {
+    type("l", true);
+    key("ArrowDown", true);
+    key("Enter", true);
+    expect(onPick.mock.calls).toEqual([["put"]]);
+  });
+
+  it("closes free text on Enter without picking a suggestion when no query was typed", () => {
+    value = "SPY";
+    call("onFocus", { target: { select: () => {} } }, true);
+    key("Enter", true);
+    expect(onPick).toHaveBeenCalledTimes(0);
+    expect(input(true).props.value).toBe("SPY");
+    expect(input(true).props["aria-expanded"]).toBe(false);
   });
 
   it("commits free text with Enter when no suggestions match", () => {

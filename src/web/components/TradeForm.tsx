@@ -160,6 +160,7 @@ export function TradeForm({
   const id = useId();
   const [strategy, setStrategy] = useState<TradeStrategy>(assignedStock ? "cc" : "csp");
   const [ticker, setTicker] = useState(assignedStock?.underlying ?? "");
+  const [tickerQuery, setTickerQuery] = useState<string | null>(null);
   const [openedOn, setOpenedOn] = useState<string>(asOf);
   let chips: ReturnType<typeof expiryChips> = [];
   let calendarUnsupported = false;
@@ -213,7 +214,7 @@ export function TradeForm({
     : Number.isSafeInteger(qty) && qty > 0 && qty <= 2147483647
       ? formatMoney4(defaultFee(qty), 2)
       : "";
-  const common = { underlying: ticker, openedOn, tags, notes };
+  const common = { underlying: tickerQuery ?? ticker, openedOn, tags, notes };
   const option = { expiry, quantity: qty, adjusted };
   const raw = stock
     ? { ...common, strategy, shares: qty, price, fees: fees ?? feeDefault }
@@ -250,6 +251,7 @@ export function TradeForm({
   const dirty =
     strategy !== initial.current.strategy ||
     ticker !== initial.current.ticker ||
+    (tickerQuery !== null && tickerQuery !== "" && tickerQuery !== ticker) ||
     openedOn !== initial.current.openedOn ||
     expiry !== initial.current.expiry ||
     quantity !== initial.current.quantity ||
@@ -333,7 +335,7 @@ export function TradeForm({
               label="Ticker"
               value={ticker}
               displayValue={ticker}
-              freeText={{ normalize: uppercase }}
+              freeText={{ normalize: uppercase, onQueryChange: setTickerQuery }}
               options={(query) => {
                 const symbols = tickerSuggestions(query, options.tickers);
                 const choices: ComboOption<string>[] = symbols.map((value) => ({
@@ -461,12 +463,12 @@ export function TradeForm({
             )}
             <div className="trade-fee-line">
               <span>
-                Fees{" "}
+                Fees
                 {feeDefault === "" && fees === null && longFees === null && shortFees === null
                   ? ""
                   : spread && (longFees !== null || shortFees !== null)
-                    ? `$${longFees ?? feeDefault} / $${shortFees ?? feeDefault} (long / short)`
-                    : `$${spread ? feeDefault : (fees ?? feeDefault)}${spread ? " per leg" : ""}`}
+                    ? ` $${longFees ?? feeDefault} / $${shortFees ?? feeDefault} (long / short)`
+                    : ` $${spread ? feeDefault : (fees ?? feeDefault)}${spread ? " per leg" : ""}`}
                 {!stock &&
                   feeDefault !== "" &&
                   (spread ? longFees === null && shortFees === null : fees === null) &&

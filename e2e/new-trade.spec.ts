@@ -196,6 +196,51 @@ test.describe("leaving the new trade screen", () => {
     expect(dialogs.messages).toEqual([]);
   });
 
+  test("Cancel with only a ticker draft asks once and Stay keeps the draft", async ({ page }) => {
+    const dialogs = watchDialogs(page);
+    await page.goto("/");
+    await newTradeButton(page).click();
+    await ticker(page).fill("NVDA");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page).toHaveURL(/#\/trades\/new$/);
+    await expect(ticker(page)).toHaveValue("NVDA");
+    expect(dialogs.messages).toEqual([DISCARD]);
+  });
+
+  for (const navigation of ["Back", "sidebar"] as const) {
+    test(`${navigation} with only a ticker draft asks once and Stay keeps it`, async ({ page }) => {
+      const dialogs = watchDialogs(page);
+      await page.goto("/");
+      await newTradeButton(page).click();
+      await ticker(page).fill("NVDA");
+      await expectBeforeUnloadPrevented(page, true);
+      if (navigation === "Back") await page.goBack();
+      else await page.getByRole("link", { name: "Monthly P/L" }).click();
+      await expect(page).toHaveURL(/#\/trades\/new$/);
+      await expect(ticker(page)).toHaveValue("NVDA");
+      expect(dialogs.messages).toEqual([DISCARD]);
+    });
+  }
+
+  test("Ticker Enter commits typed text unless an option is arrow-highlighted", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await newTradeButton(page).click();
+    await ticker(page).fill("d");
+    await expect(page.getByRole("option", { name: "DRAM", exact: true })).toBeVisible();
+    // Clicking a group heading must not blur the input or commit the query.
+    await page.locator(".combo-group").filter({ hasText: "In journal" }).click();
+    await expect(ticker(page)).toBeFocused();
+    await ticker(page).press("Enter");
+    await expect(ticker(page)).toHaveValue("D");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await ticker(page).fill("d");
+    await ticker(page).press("ArrowDown");
+    await ticker(page).press("Enter");
+    await expect(ticker(page)).toHaveValue("DRAM");
+  });
+
   test("Cancel on a dirty form asks, and Stay keeps everything", async ({ page }) => {
     const dialogs = watchDialogs(page);
     await openDirtyForm(page);
@@ -428,8 +473,9 @@ test.describe("leaving the new trade screen", () => {
     await newTradeButton(page).click();
     await expectBeforeUnloadPrevented(page, false);
     await ticker(page).fill("DRAM");
-    await expectBeforeUnloadPrevented(page, false);
+    await expectBeforeUnloadPrevented(page, true);
     await ticker(page).press("Escape");
+    await expectBeforeUnloadPrevented(page, false);
     await expect(ticker(page)).toHaveValue("");
     const strategy = page.getByRole("combobox", { name: "Strategy", exact: true });
     await strategy.fill("bear");
@@ -475,6 +521,10 @@ test.describe("leaving the new trade screen", () => {
     await page.getByLabel("Quantity", { exact: true }).fill("10");
     await page.getByLabel("Strike", { exact: true }).fill("50");
     await page.getByLabel("Fill price", { exact: true }).fill("1.85");
+    // Leave the final ticker edit uncommitted until the Save click blurs it.
+    await ticker(page).fill("SPY");
+    await ticker(page).press("Tab");
+    await ticker(page).fill("DRAM");
     await page.getByRole("button", { name: "Save trade", exact: true }).click();
     await expect(page).toHaveURL("/#/");
     await expect(dramRows).toHaveCount(initialDramRows + 1);
