@@ -3,8 +3,9 @@
   "extends": ["config:recommended"],
   "packageRules": [
     {
-      "description": "Automerge non-major updates once CI passes",
+      "description": "Automerge non-major updates of stable (1.x+) versions once CI passes",
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchCurrentVersion": "!/^0/",
       "automerge": true,
       "platformAutomerge": false
     },
