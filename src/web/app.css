@@ -130,6 +130,7 @@ h1 {
   }
   .side {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     padding: var(--sp-3) var(--sp-4);
@@ -140,7 +141,10 @@ h1 {
     padding: 0;
   }
   .side nav {
-    display: none;
+    display: flex;
+    order: 1;
+    flex: 1 0 100%;
+    gap: var(--sp-2);
   }
   .theme-select {
     flex-direction: row;

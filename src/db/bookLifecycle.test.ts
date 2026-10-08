@@ -2,14 +2,68 @@ import { expect, it } from "vitest";
 import type { Money4 } from "../domain/money.ts";
 import { bookTotals } from "../domain/totals.ts";
 import { toBookPosition, toBookPositions } from "./book.ts";
+import type { Database } from "./database.ts";
 import { repository } from "./repository.ts";
-import { seedBook } from "./seed.ts";
+import * as s from "./schema.ts";
 import { testDatabase } from "./test/database.ts";
+
+async function seedHeldCover(db: Database) {
+  const accountId = "00000000-0000-4000-8000-000000000001";
+  const campaignId = "00000000-0000-4000-8000-000000000002";
+  await db.insert(s.accounts).values({ id: accountId, label: "Held cover", broker: "manual" });
+  await db.insert(s.campaigns).values({
+    id: campaignId,
+    accountId,
+    title: "DRAM held shares",
+    openedOn: "2026-09-18",
+  });
+  await repository(db).createPosition({
+    campaignId,
+    underlying: "DRAM",
+    strategy: "cc",
+    role: "income",
+    openedOn: "2026-09-18",
+    legs: [
+      {
+        kind: "stock",
+        side: "long",
+        underlying: "DRAM",
+        multiplier: 1,
+        trades: [
+          {
+            action: "open",
+            tradeDate: "2026-09-18",
+            quantity: 1500,
+            price: 530000 as Money4,
+            cash: -795000000 as Money4,
+          },
+        ],
+      },
+      {
+        kind: "call",
+        side: "short",
+        underlying: "DRAM",
+        strike: 550000 as Money4,
+        expiry: "2026-10-16",
+        trades: [
+          {
+            action: "open",
+            tradeDate: "2026-09-18",
+            quantity: 15,
+            price: 11000 as Money4,
+            cash: 16500000 as Money4,
+          },
+        ],
+      },
+    ],
+  });
+  return accountId;
+}
 
 it("partial held CC close retains500 uncovered shares and81500 deployed with real position ids", async () => {
   const { db, client } = await testDatabase();
   try {
-    const accountId = await seedBook(db);
+    const accountId = await seedHeldCover(db);
     const repo = repository(db);
     const position = (await repo.readOpenPositions(accountId)).find(
       (p) => p.strategy === "cc" && p.underlying === "DRAM",
@@ -53,11 +107,11 @@ it("partial held CC close retains500 uncovered shares and81500 deployed with rea
 }, 20000);
 
 it.each(["close", "expire"] as const)(
-  "renders surviving seeded CC cover as stock after option %s, including partial stock closes",
+  "renders surviving held CC cover as stock after option %s, including partial stock closes",
   async (action) => {
     const { db, client } = await testDatabase();
     try {
-      const accountId = await seedBook(db);
+      const accountId = await seedHeldCover(db);
       const repo = repository(db);
       const position = (await repo.readOpenPositions(accountId)).find(
         (p) => p.strategy === "cc" && p.underlying === "DRAM",

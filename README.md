@@ -62,12 +62,18 @@ A failed write returns 500 so a broken connection shows up in the cron log.
 ## Database
 
 `pnpm db:seed [local-path]` migrates and seeds local PGlite (default `.pglite/`). It never
-connects to Neon and replaces only the prototype seed account's open book on reruns.
-The synthetic opening fills preserve the fixture's covered-share basis and spread net
-price; they do not represent historical assignments or rolls. The two NVDL puts and the
-NVDA hedge share one campaign; the position count and Sheet totals are unchanged. The
-open-book DTO bridge supports only the prototype's strategies; repository reads retain the
-full stored rows.
+connects to Neon and atomically replaces only the prototype account's book, including
+history, on reruns. The seed copies the prototype's 14 September CLOSED outcomes, totaling
+$6,624.67 net; it does not synthesize the unrelated HISTORY monthly aggregates. The source
+is an incomplete fill ledger: missing prices, fees and opening dates use documented minimal
+synthetic fills in `src/db/seedHistory.ts`, not reconstructed broker executions. Other open
+fills retain the fixture's share basis and spread net price. DRAM's recorded Aug 21 put
+assignment on Sep 18 creates 1,500 shares at $55 with $53 premium-adjusted basis; its existing
+call covers that stock. TQQQ's recorded Aug 28 58P → Sep 24 55P roll shares one chain. The two
+NVDL puts and NVDA hedge share one campaign. There are 13 stored open positions but still
+12 Sheet rows, with unchanged totals. Replacement leaves foreign accounts untouched;
+T8's single-account assignment boundary rejects a multi-account database and rolls back
+replacement. Repository reads retain the full stored rows.
 
 ## Campaign drill-down
 
@@ -75,7 +81,7 @@ Sheet ticker links open `#/campaigns/<id>`. `GET /api/campaigns/:id` returns rec
 trades, assignments and the latest mark on or before today in New York. Scenario cards use
 the domain math; historical trades stay in the timeline, not in open-position scenarios.
 Covered calls show assignment-adjusted basis only when an assignment is recorded; the
-synthetic DRAM seed instead labels its $53.00 as opening share basis.
+DRAM seed records its assignment and shows the $53.00 premium-adjusted basis.
 
 Swing legs accept `PUT /api/legs/:id/mark` with `{ "price": "5.10" }` and an optional
 `asOf` calendar date (default: today in New York). Prices must be positive decimal USD with
