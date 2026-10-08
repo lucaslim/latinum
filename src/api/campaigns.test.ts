@@ -119,6 +119,7 @@ async function wheel(db: Database) {
         kind: "call",
         side: "short",
         underlying: "DRAM",
+        coveredLegId: stockLeg.id,
         strike: m("55"),
         expiry: "2026-10-16",
         trades: [
@@ -201,6 +202,7 @@ test("GET returns recorded assignment data and a covered call in a separate posi
   expect(body.positions[0]?.closedOn).toBe("2026-09-18");
   expect(body.positions[0]?.legs[0]?.trades.map((t) => t.action)).toEqual(["open", "assign"]);
   expect(body.positions[1]?.legs[0]?.trades[0]?.price).toBe(550000);
+  expect(body.positions[2]?.legs[0]?.coveredLegId).toBe(body.positions[1]?.legs[0]?.id);
   const view = buildCampaignView(body);
   expect(view.csp).toBeNull();
   expect(view.coveredCalls).toEqual([

@@ -4,6 +4,12 @@ import type {
   ManualMarkRequest,
   ManualMarkResponse,
 } from "../domain/campaign.ts";
+import {
+  LifecycleHttpError,
+  type LifecycleResult,
+  saveLifecycle as postLifecycle,
+  type SaveLifecycle,
+} from "./lifecycleApi.ts";
 
 export type CampaignLoad =
   | { status: "loading" }
@@ -80,5 +86,56 @@ export function useCampaign(id: string) {
     }
   }
 
-  return { load, retry: () => setAttempt((value) => value + 1), saveMark };
+  const saveLifecycle: SaveLifecycle = async (positionId, mutation) => {
+    const request = active.current;
+    if (!request || request.id !== id) throw new Error("Campaign is no longer active");
+    let result: LifecycleResult;
+    try {
+      result = await postLifecycle(positionId, mutation, request.abort.signal);
+    } catch (error) {
+      if (
+        error instanceof LifecycleHttpError &&
+        error.status === 409 &&
+        error.code === "stale_revision"
+      ) {
+        const message = "Position changed. Reload the campaign before another action.";
+        if (active.current === request) {
+          active.current = null;
+          setLoad({ status: "error", message });
+        }
+        throw error;
+      }
+      if (error instanceof LifecycleHttpError && error.status >= 400 && error.status < 500)
+        throw error;
+      const status = error instanceof LifecycleHttpError ? ` (HTTP ${error.status})` : "";
+      const message = `Lifecycle action outcome is uncertain${status}. Reload the campaign before another action.`;
+      if (active.current === request) {
+        active.current = null;
+        setLoad({ status: "error", message });
+      }
+      throw new Error(message, { cause: error });
+    }
+    const revision = ++request.revision;
+    let data: CampaignResponse;
+    try {
+      data = await fetchCampaign(id, request.abort.signal);
+    } catch (error) {
+      const message =
+        "Lifecycle action was saved, but campaign refresh failed. Reload the campaign before another action.";
+      if (active.current === request) {
+        active.current = null;
+        setLoad({ status: "error", message });
+      }
+      throw new Error(message, { cause: error });
+    }
+    if (
+      !request.abort.signal.aborted &&
+      active.current === request &&
+      request.revision === revision
+    ) {
+      setLoad({ status: "ready", data });
+    }
+    return result;
+  };
+  return { load, retry: () => setAttempt((value) => value + 1), saveMark, saveLifecycle };
 }

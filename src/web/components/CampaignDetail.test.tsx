@@ -27,12 +27,31 @@ afterEach(() => {
 });
 
 describe("Hash routes", () => {
+  it("renders stale revision recovery without leaving mutation forms available", () => {
+    vi.stubGlobal("window", { location: { hash: "#/campaigns/nvdl-campaign" } });
+    vi.spyOn(campaignApi, "useCampaign").mockReturnValue({
+      load: {
+        status: "error",
+        message: "Position changed. Reload the campaign before another action.",
+      },
+      retry: vi.fn(),
+      saveMark: vi.fn(),
+      saveLifecycle: vi.fn(),
+    });
+    const html = renderToStaticMarkup(<App />);
+    expect(text(html)).toContain("Position changed. Reload the campaign before another action.");
+    expect(text(html)).toContain("Retry campaign");
+    expect(html).not.toContain("lifecycle-actions");
+    expect(text(html)).not.toContain("Close NVDL position");
+    expect(text(html)).not.toContain("Record close");
+  });
   it("renders campaign load errors with a retry and a hash-only Back link", () => {
     vi.stubGlobal("window", { location: { hash: "#/campaigns/missing" } });
     const hook = vi.spyOn(campaignApi, "useCampaign").mockReturnValue({
       load: { status: "error", message: "Could not load campaign (HTTP 404)" },
       retry: vi.fn(),
       saveMark: vi.fn(),
+      saveLifecycle: vi.fn(),
     });
     const html = renderToStaticMarkup(<App />);
     expect(html).toContain('<p role="alert">Could not load campaign (HTTP 404)</p>');
@@ -46,6 +65,7 @@ describe("Hash routes", () => {
       load: { status: "ready", data: aapl },
       retry: vi.fn(),
       saveMark: vi.fn(),
+      saveLifecycle: vi.fn(),
     });
     const html = renderToStaticMarkup(<App />);
     expect(html).toContain("AAPL long call campaign");
@@ -102,6 +122,165 @@ describe("Campaign transport", () => {
     await expect(
       saveManualMark("missing", { price: "1.00", asOf: "2026-10-01" }, signal),
     ).rejects.toThrow("Could not save mark (HTTP 404)");
+  });
+});
+
+describe("Lifecycle integration", () => {
+  it("offers an enabled covered call callback while retaining authoritative assignment basis", () => {
+    const campaign: CampaignResponse = {
+      ...dramAssignedCampaign,
+      positions: dramAssignedCampaign.positions.filter((position) => position.strategy !== "cc"),
+    };
+    const html = renderToStaticMarkup(
+      <CampaignDetail campaign={campaign} onSellCoveredCall={() => {}} />,
+    );
+    const output = text(html);
+    expect(output).toContain("Entry $55.00");
+    expect(output).toContain("Assigned share basis $53.00");
+    expect(output).toContain("Sell covered call");
+    expect(output).not.toContain("Available after trade-form integration");
+    expect(html).toMatch(/<button type="button">Sell covered call<\/button>/);
+    expect(output).toContain("Realized net P/L +$2,990.10");
+  });
+  it("keeps the offer disabled without a callback or a full lot of open assigned shares", () => {
+    const assigned = {
+      ...dramAssignedCampaign,
+      positions: dramAssignedCampaign.positions.filter((position) => position.strategy !== "cc"),
+    };
+    expect(render(assigned)).toMatch(
+      /<button type="button" disabled="">Sell covered call<\/button>/,
+    );
+    const oddLot: CampaignResponse = {
+      ...assigned,
+      positions: assigned.positions.map((position) => ({
+        ...position,
+        legs: position.legs.map((leg) => ({
+          ...leg,
+          trades:
+            leg.kind === "stock"
+              ? [
+                  ...leg.trades,
+                  {
+                    id: "sold-odd-lot",
+                    action: "close",
+                    tradeDate: d("2026-10-01"),
+                    quantity: 1450,
+                    price: m("55"),
+                    cash: m("79750"),
+                    fees: m("0"),
+                  },
+                ]
+              : leg.trades,
+        })),
+      })),
+    };
+    const html = renderToStaticMarkup(
+      <CampaignDetail campaign={oddLot} onSellCoveredCall={() => {}} />,
+    );
+    expect(html).toMatch(/<button type="button" disabled="">Sell covered call<\/button>/);
+    expect(text(html)).toContain("At least 100 open assigned shares are required.");
+  });
+  it("uses shared recorded allocations across rounding residuals and a reopened pool", () => {
+    const campaign: CampaignResponse = {
+      ...aapl,
+      positions: aapl.positions.map((position) => ({
+        ...position,
+        closedOn: d("2026-10-01"),
+        legs: position.legs.map((leg) => ({
+          ...leg,
+          trades: [
+            {
+              id: "tiny-open",
+              action: "open",
+              tradeDate: d("2026-09-10"),
+              quantity: 3,
+              price: m("0.0001"),
+              cash: m("-0.0101"),
+              fees: m("0"),
+            },
+            {
+              id: "tiny-partial",
+              action: "close",
+              tradeDate: d("2026-09-11"),
+              quantity: 1,
+              price: m("0"),
+              cash: m("0"),
+              fees: m("0"),
+            },
+            {
+              id: "tiny-remainder",
+              action: "close",
+              tradeDate: d("2026-09-12"),
+              quantity: 2,
+              price: m("0"),
+              cash: m("0"),
+              fees: m("0"),
+            },
+            {
+              id: "reopen",
+              action: "open",
+              tradeDate: d("2026-09-13"),
+              quantity: 1,
+              price: m("7.80"),
+              cash: m("-780"),
+              fees: m("0"),
+            },
+            {
+              id: "reclose",
+              action: "close",
+              tradeDate: d("2026-10-01"),
+              quantity: 1,
+              price: m("5.10"),
+              cash: m("510"),
+              fees: m("0"),
+            },
+          ],
+        })),
+      })),
+    };
+    const output = text(render(campaign));
+    expect(output).toContain("Total realized net P/L −$270.01");
+    expect(output).toContain("Realized net P/L −$270.00");
+    expect(output).toContain("Realized net P/L −$0.01");
+  });
+  it("offers close, expiry and assignment for open unadjusted CSP puts", () => {
+    const html = renderToStaticMarkup(
+      <CampaignDetail
+        campaign={nvdlCampaign}
+        onSaveLifecycle={async () => {
+          throw new Error("unused");
+        }}
+      />,
+    );
+    expect(text(html)).toContain("Close NVDL position");
+    expect(text(html)).toContain("Expire NVDL options");
+    expect(text(html)).toContain("Assign NVDL put");
+    expect(text(html)).toContain("Link NVDA hedge");
+  });
+  it("does not offer assignment for calls, spreads or adjusted puts", () => {
+    const campaign: CampaignResponse = {
+      ...nvdlCampaign,
+      positions: [
+        ...aapl.positions,
+        ...nvdlCampaign.positions.map((position) => ({
+          ...position,
+          legs: position.legs.map((leg) => ({ ...leg, adjusted: true })),
+        })),
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <CampaignDetail
+        campaign={campaign}
+        onSaveLifecycle={async () => {
+          throw new Error("unused");
+        }}
+      />,
+    );
+    expect(text(html)).toContain("Close AAPL position");
+    expect(text(html)).toContain("Close NVDL position");
+    expect(text(html)).not.toContain("Assign NVDL put");
+    expect(text(html)).not.toContain("Assign AAPL");
+    expect(text(html)).not.toContain("Assign NVDA");
   });
 });
 

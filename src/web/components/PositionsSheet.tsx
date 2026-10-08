@@ -119,15 +119,21 @@ export function PositionsSheet({
 }) {
   const [filter, setFilter] = useState<SheetFilter>(initialFilter);
   const visible = sortByExpiry(filterPositions(positions, filter));
-  const rows = visible.map((p) => ({ id: p.id, campaignId: p.campaignId, ...sheetRow(p, asOf) }));
+  const rows = visible.map((p) => ({
+    id: p.id,
+    key: `${p.id}:${p.strategy}`,
+    campaignId: p.campaignId,
+    ...sheetRow(p, asOf),
+  }));
+  const positionCount = new Set(positions.map((p) => p.id)).size;
   const footerTotals = bookTotals(visible);
 
   return (
     <>
       <h1>Open positions</h1>
       <p className="subtitle">
-        As of {shortDate(asOf)} · {positions.length} open position
-        {positions.length === 1 ? "" : "s"}
+        As of {shortDate(asOf)} · {positionCount} open position
+        {positionCount === 1 ? "" : "s"}
       </p>
       <Kpis totals={bookTotals(positions)} />
       <fieldset className="chips">
@@ -164,7 +170,7 @@ export function PositionsSheet({
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className={r.tint ? `row ${r.tint}` : "row"}>
+              <tr key={r.key} className={r.tint ? `row ${r.tint}` : "row"}>
                 <td className="tk">
                   <a href={`#/campaigns/${r.campaignId}`}>{r.ticker}</a>
                   {onEdit && (
@@ -215,7 +221,7 @@ export function PositionsSheet({
 
       <div className="cards" data-testid="sheet-cards">
         {rows.map((r) => (
-          <article key={r.id} className={r.tint ? `card ${r.tint}` : "card"}>
+          <article key={r.key} className={r.tint ? `card ${r.tint}` : "card"}>
             <div className="l1">
               <a href={`#/campaigns/${r.campaignId}`}>{r.ticker}</a>{" "}
               {onEdit && (

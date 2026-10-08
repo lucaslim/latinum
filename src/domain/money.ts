@@ -58,6 +58,21 @@ export function divMoney4(a: Money4, divisor: number): Money4 {
   return checkedMoney4(Number(numerator < 0n !== denominator < 0n ? -quotient : quotient));
 }
 
+/** Exact integer apportionment; truncates toward zero without a floating-point product. */
+export function prorateMoney4(amount: Money4, quantity: number, totalQuantity: number): Money4 {
+  if (
+    !Number.isSafeInteger(amount) ||
+    !Number.isSafeInteger(quantity) ||
+    !Number.isSafeInteger(totalQuantity) ||
+    quantity < 0 ||
+    totalQuantity <= 0 ||
+    quantity > totalQuantity
+  ) {
+    throw new RangeError("Invalid Money4 apportionment");
+  }
+  return Number((BigInt(amount) * BigInt(quantity)) / BigInt(totalQuantity)) as Money4;
+}
+
 /** A dimensionless ratio of two amounts, for yields and percentages. */
 export function ratio(numerator: Money4, denominator: Money4): number {
   if (denominator === 0) throw new RangeError("Cannot take a ratio over a zero amount");

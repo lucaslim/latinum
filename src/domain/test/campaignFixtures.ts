@@ -13,6 +13,7 @@ export const nvdlCampaign: CampaignResponse = {
   positions: [
     {
       id: "nvdl-75",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "NVDL",
       strategy: "csp",
       role: "income",
@@ -47,6 +48,7 @@ export const nvdlCampaign: CampaignResponse = {
     },
     {
       id: "nvdl-70",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "NVDL",
       strategy: "csp",
       role: "income",
@@ -81,6 +83,7 @@ export const nvdlCampaign: CampaignResponse = {
     },
     {
       id: "nvda-hedge",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "NVDA",
       strategy: "put_debit_spread",
       role: "hedge",
@@ -150,6 +153,7 @@ export const dramCampaign: CampaignResponse = {
   positions: [
     {
       id: "dram-stock",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "DRAM",
       strategy: "stock",
       role: "swing",
@@ -184,6 +188,7 @@ export const dramCampaign: CampaignResponse = {
     },
     {
       id: "dram-call",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "DRAM",
       strategy: "cc",
       role: "income",
@@ -230,6 +235,7 @@ export const aaplCampaign: CampaignResponse = {
   positions: [
     {
       id: "aapl-call",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "AAPL",
       strategy: "long_call",
       role: "swing",
@@ -276,6 +282,7 @@ export const crwdCampaign: CampaignResponse = {
   positions: [
     {
       id: "crwd-stock",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "CRWD",
       strategy: "stock",
       role: "swing",
@@ -331,6 +338,7 @@ export const dramAssignedCampaign: CampaignResponse = {
   positions: [
     {
       id: "dram-put",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "DRAM",
       strategy: "csp",
       role: "income",
@@ -374,6 +382,7 @@ export const dramAssignedCampaign: CampaignResponse = {
     },
     {
       id: "dram-assigned-stock",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "DRAM",
       strategy: "stock",
       role: "swing",
@@ -408,6 +417,7 @@ export const dramAssignedCampaign: CampaignResponse = {
     },
     {
       id: "dram-assigned-call",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       underlying: "DRAM",
       strategy: "cc",
       role: "income",

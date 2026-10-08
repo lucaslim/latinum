@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { CampaignMark, CampaignResponse, ManualMarkResponse } from "../domain/campaign.ts";
 import { type IsoDate, parseIsoDate } from "../domain/dates.ts";
 import type { Database } from "./database.ts";
+import { positionRevision } from "./positionRevision.ts";
 import * as s from "./schema.ts";
 
 export class ManualMarkConflictError extends Error {
@@ -11,8 +12,8 @@ export class ManualMarkConflictError extends Error {
 }
 
 export class ManualMarkDateError extends Error {
-  constructor() {
-    super("Leg was not open on mark date");
+  constructor(message = "Leg was not open on mark date") {
+    super(message);
   }
 }
 
@@ -77,6 +78,13 @@ export function campaignRepository(db: Database) {
           assignments,
           positions: positions.map((position) => ({
             id: position.id,
+            revision: positionRevision(
+              position,
+              legs.filter((leg) => leg.positionId === position.id),
+              trades.filter((trade) =>
+                legs.some((leg) => leg.positionId === position.id && leg.id === trade.legId),
+              ),
+            ),
             underlying: position.underlying,
             strategy: position.strategy,
             role: position.role,
@@ -97,6 +105,7 @@ export function campaignRepository(db: Database) {
                   expiry: leg.expiry === null ? null : parseIsoDate(leg.expiry),
                   multiplier: leg.multiplier,
                   adjusted: leg.adjusted,
+                  coveredLegId: leg.coveredLegId,
                   trades: trades
                     .filter((t) => t.legId === leg.id)
                     .map((t) => ({
@@ -137,8 +146,7 @@ export function campaignRepository(db: Database) {
         .where(eq(s.legs.id, legId))
         .for("update");
       if (!row) return null;
-      if (row.position.role !== "swing" || row.position.closedOn !== null)
-        throw new ManualMarkConflictError();
+      if (row.position.closedOn !== null) throw new ManualMarkConflictError();
       const trades = await tx.select().from(s.trades).where(eq(s.trades.legId, legId));
       const balance = trades.reduce(
         (n, t) => n + (t.action === "open" ? t.quantity : -t.quantity),
@@ -148,6 +156,47 @@ export function campaignRepository(db: Database) {
       const historicalBalance = trades
         .filter((t) => t.tradeDate <= mark.asOf)
         .reduce((n, t) => n + (t.action === "open" ? t.quantity : -t.quantity), 0);
+      if (row.position.role !== "swing") {
+        // Held-cover history stays a CC; only its surviving, uncovered stock becomes a swing.
+        if (row.position.strategy !== "cc" || row.leg.kind !== "stock" || row.leg.side !== "long")
+          throw new ManualMarkConflictError();
+        const options = await tx
+          .select()
+          .from(s.legs)
+          .where(
+            and(
+              eq(s.legs.positionId, row.position.id),
+              or(eq(s.legs.kind, "put"), eq(s.legs.kind, "call")),
+            ),
+          );
+        const optionTrades = await tx
+          .select()
+          .from(s.trades)
+          .where(
+            inArray(
+              s.trades.legId,
+              options.map((leg) => leg.id),
+            ),
+          );
+        let coveredShares = 0n;
+        let historicalCoveredShares = 0n;
+        for (const leg of options.filter(
+          (leg) => leg.kind === "call" && leg.side === "short" && leg.coveredLegId === null,
+        )) {
+          for (const trade of optionTrades.filter((t) => t.legId === leg.id)) {
+            const shares =
+              BigInt(trade.quantity) *
+              BigInt(leg.multiplier) *
+              (trade.action === "open" ? 1n : -1n);
+            coveredShares += shares;
+            if (trade.tradeDate <= mark.asOf) historicalCoveredShares += shares;
+          }
+        }
+        if (BigInt(balance) * BigInt(row.leg.multiplier) <= coveredShares)
+          throw new ManualMarkConflictError();
+        if (BigInt(historicalBalance) * BigInt(row.leg.multiplier) <= historicalCoveredShares)
+          throw new ManualMarkDateError("Leg had no uncovered shares on mark date");
+      }
       if (historicalBalance <= 0) throw new ManualMarkDateError();
       await tx
         .insert(s.marks)

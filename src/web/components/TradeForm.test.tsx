@@ -10,6 +10,35 @@ import { previewTrade } from "../../shared/tradeForm.ts";
 import { DerivedTradeMetrics, TradeForm } from "./TradeForm.tsx";
 
 describe("TradeForm", () => {
+  it.each([1500, 1599])(
+    "prefills assigned DRAM shares as CC contracts from %s uncovered shares",
+    (uncoveredShares) => {
+      const assignedStock = {
+        legId: "00000000-0000-4000-8000-000000000053",
+        underlying: "DRAM",
+        uncoveredShares,
+        basis: 530000 as Money4,
+        assignedOn: parseIsoDate("2026-10-16"),
+      };
+      const html = renderToStaticMarkup(
+        <TradeForm
+          asOf={parseIsoDate("2026-10-16")}
+          options={{ tickers: ["DRAM"], tags: [], assignedStock: [assignedStock] }}
+          assignedStock={{ ...assignedStock, basis: 550000 as Money4 }}
+          onSaved={() => {}}
+          onCancel={() => {}}
+        />,
+      );
+      expect(html).toContain('aria-pressed="true">CC</button>');
+      expect(html).toMatch(/<label>Ticker<input[^>]*value="DRAM"/);
+      expect(html).toMatch(/<label>Quantity<input[^>]*value="15"/);
+      expect(html).toContain('<option value="00000000-0000-4000-8000-000000000053" selected="">');
+      expect(html).not.toContain('<option value="held" selected="">');
+      expect(html).toContain('<input readOnly="" value="53.0000"/>');
+      expect(html).toContain('value="9.75"');
+    },
+  );
+
   it("offers all ten strategies and invalid initial inputs cannot save", () => {
     const html = renderToStaticMarkup(
       <TradeForm

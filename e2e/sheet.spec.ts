@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ request }) => {
+  const response = await request.post("/api/test/reset");
+  expect(response.status()).toBe(200);
+});
+
 const viewports = [
   { width: 1400, height: 900, totals: "sheet-table" },
   { width: 390, height: 844, totals: "sheet-cards" },

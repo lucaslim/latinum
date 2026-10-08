@@ -152,6 +152,35 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
     .filter(({ position }) => position.strategy === "cc" && position.role === "income")
     .flatMap(({ open }) => open)
     .filter((o): o is OpenOption => isOption(o) && o.leg.kind === "call" && o.leg.side === "short");
+  const backingByCall = new Map<string, OpenLeg>();
+  const reserved = new Map<string, number>();
+  for (const { position, open } of positions) {
+    if (position.strategy !== "cc" || position.role !== "income") continue;
+    const options = open.filter(({ leg }) => leg.kind !== "stock");
+    const [call] = options;
+    if (
+      options.length !== 1 ||
+      !call ||
+      !isOption(call) ||
+      call.leg.kind !== "call" ||
+      call.leg.side !== "short"
+    )
+      continue;
+    const held = open.filter(({ leg }) => leg.kind === "stock" && leg.side === "long");
+    const candidates =
+      call.leg.coveredLegId != null
+        ? stock.filter(({ leg }) => leg.id === call.leg.coveredLegId)
+        : held.length > 0 || call.leg.coveredLegId === null
+          ? held
+          : stock.filter(({ leg }) => leg.underlying === position.underlying);
+    const [backing] = candidates;
+    const shares = call.quantity * call.leg.multiplier;
+    // Only legacy DTOs may infer a campaign-wide link, and never between ambiguous lots.
+    if (candidates.length !== 1 || !backing || backing.quantity * backing.leg.multiplier < shares)
+      continue;
+    backingByCall.set(call.leg.id, backing);
+    reserved.set(backing.leg.id, (reserved.get(backing.leg.id) ?? 0) + shares);
+  }
   const puts: CashSecuredPut[] = [];
   const hedges: DebitSpread[] = [];
 
@@ -180,33 +209,30 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
       const options = open.filter(({ leg }) => leg.kind !== "stock");
       const [call] = options;
       if (options.length === 0) continue;
-      const backing = stock.filter(({ leg }) => leg.underlying === position.underlying);
-      const stockShares = backing.reduce((n, s) => n + s.quantity * s.leg.multiplier, 0);
+      const backing = call ? backingByCall.get(call.leg.id) : undefined;
       if (
         options.length === 1 &&
         call &&
         isOption(call) &&
         call.leg.kind === "call" &&
         call.leg.side === "short" &&
-        stockShares >= call.quantity * call.leg.multiplier
+        backing
       ) {
-        const basis = divMoney4(
-          sumMoney4(
-            backing.map((s) =>
-              mulMoney4(openingEntry(s.leg, campaign), s.quantity * s.leg.multiplier),
-            ),
-          ),
-          stockShares,
+        const backingCalls = openCalls.filter(
+          (c) => backingByCall.get(c.leg.id)?.leg.id === backing.leg.id,
         );
+        const coveredShares = backingCalls.reduce(
+          (shares, c) => shares + c.quantity * c.leg.multiplier,
+          0,
+        );
+        const basis = openingEntry(backing.leg, campaign);
         const premium = mulMoney4(call.entry, call.quantity * call.leg.multiplier);
         const allPremium = sumMoney4(
-          openCalls
-            .filter((c) => c.leg.underlying === position.underlying)
-            .map((c) => mulMoney4(c.entry, c.quantity * c.leg.multiplier)),
+          backingCalls.map((c) => mulMoney4(c.entry, c.quantity * c.leg.multiplier)),
         );
         const shares = call.quantity * call.leg.multiplier;
-        const assigned = backing.some((s) =>
-          s.leg.trades.some((t) => campaign.assignments.some((a) => a.stockTradeId === t.id)),
+        const assigned = backing.leg.trades.some((t) =>
+          campaign.assignments.some((a) => a.stockTradeId === t.id),
         );
         view.coveredCalls.push({
           positionId: position.id,
@@ -215,7 +241,7 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
           shares,
           basis,
           basisSource: assigned ? "assignment" : "opening",
-          adjustedBasis: adjustedBasis(basis, [divMoney4(allPremium, stockShares)]),
+          adjustedBasis: adjustedBasis(basis, [divMoney4(allPremium, coveredShares)]),
           premium,
           strike: call.leg.strike,
           calledAwayGain: calledAwayGain({
@@ -296,7 +322,7 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
         continue;
       }
       if (position.role === "swing") {
-        view.swings.push(swingView(position, first));
+        view.swings.push(swingView(position, first, campaign));
         continue;
       }
     }
@@ -308,17 +334,33 @@ export function buildCampaignView(campaign: CampaignResponse): CampaignView {
       first.leg.kind === "stock" &&
       first.leg.side === "long"
     ) {
-      view.swings.push(swingView(position, first));
       continue;
     }
     view.unsupportedPositionIds.push(position.id);
+  }
+  for (const { position, open } of positions) {
+    if (
+      !(
+        (position.strategy === "stock" && position.role === "swing" && open.length === 1) ||
+        (position.strategy === "cc" && position.role === "income")
+      )
+    )
+      continue;
+    for (const shares of open.filter(({ leg }) => leg.kind === "stock" && leg.side === "long")) {
+      const quantity = shares.quantity - (reserved.get(shares.leg.id) ?? 0) / shares.leg.multiplier;
+      if (quantity > 0) view.swings.push(swingView(position, { ...shares, quantity }, campaign));
+    }
   }
   const [firstPut, ...otherPuts] = puts;
   if (firstPut) view.csp = campaignScenarios([firstPut, ...otherPuts], hedges);
   return view;
 }
 
-function swingView(position: CampaignPosition, open: OpenLeg): CampaignView["swings"][number] {
+function swingView(
+  position: CampaignPosition,
+  open: OpenLeg,
+  campaign: CampaignResponse,
+): CampaignView["swings"][number] {
   let unrealized: Money4 | null = null;
   if (open.leg.mark !== null) {
     const openings = open.leg.trades.filter((trade) => trade.action === "open");
@@ -338,6 +380,10 @@ function swingView(position: CampaignPosition, open: OpenLeg): CampaignView["swi
     kind: open.leg.kind,
     quantity: open.quantity,
     entry: open.entry,
+    ...(open.leg.kind === "stock" &&
+    open.leg.trades.some((t) => campaign.assignments.some((a) => a.stockTradeId === t.id))
+      ? { assignmentBasis: openingEntry(open.leg, campaign) }
+      : {}),
     mark: open.leg.mark,
     unrealized,
   };
