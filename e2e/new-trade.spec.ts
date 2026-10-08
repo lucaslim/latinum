@@ -148,6 +148,20 @@ test.describe("N shortcut", () => {
 });
 
 test.describe("leaving the new trade screen", () => {
+  test("opening fee and optional editors keeps a pristine form pristine", async ({ page }) => {
+    const dialogs = watchDialogs(page);
+    await page.goto("/");
+    await newTradeButton(page).click();
+    await page.locator(".trade-fee-editor summary").click();
+    await expect(page.getByLabel("Fees", { exact: true })).toBeVisible();
+    await page.getByText("Tags, notes, opened date, adjusted contract", { exact: true }).click();
+    await expect(page.getByLabel("Opened on", { exact: true })).toBeVisible();
+    await expectBeforeUnloadPrevented(page, false);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByTestId("sheet-table")).toBeVisible();
+    expect(dialogs.messages).toEqual([]);
+  });
+
   test("a pristine form leaves on Cancel without asking", async ({ page }) => {
     const dialogs = watchDialogs(page);
     await page.goto("/");
@@ -437,7 +451,9 @@ test.describe("leaving the new trade screen", () => {
     await newTradeButton(page).click();
     await page.getByRole("button", { name: "CSP", exact: true }).click();
     await ticker(page).fill("DRAM");
+    await page.getByText("Tags, notes, opened date, adjusted contract", { exact: true }).click();
     await page.getByLabel("Opened on", { exact: true }).fill("2026-09-25");
+    await page.getByRole("button", { name: "Other…", exact: true }).click();
     await page.getByLabel("Expiry", { exact: true }).fill("2026-10-09");
     await page.getByLabel("Quantity", { exact: true }).fill("10");
     await page.getByLabel("Strike", { exact: true }).fill("50");

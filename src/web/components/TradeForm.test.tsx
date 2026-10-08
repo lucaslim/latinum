@@ -51,6 +51,19 @@ beforeEach(() => {
 });
 
 describe("TradeForm", () => {
+  it("names missing fields without exposing schema regex messages", () => {
+    const html = renderToStaticMarkup(
+      <TradeForm
+        asOf={parseIsoDate("2026-09-25")}
+        options={{ tickers: [], tags: [], assignedStock: [] }}
+        onSaved={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+    expect(html).toContain("Needs ticker, strike, fill");
+    expect(html).not.toContain("Invalid string");
+    expect(html).not.toContain("/^[A-Z]");
+  });
   it.each([1500, 1599])(
     "prefills assigned DRAM shares as CC contracts from %s uncovered shares",
     (uncoveredShares) => {
@@ -95,11 +108,11 @@ describe("TradeForm", () => {
     expect(html).toContain('value="2026-09-25"');
     expect(html).toContain('value="0.65"');
     expect(html).toContain('aria-label="Expiry quick choices"');
-    expect(html).toContain("2026-10-16 M");
+    expect(html).toContain("10-16 M 21d");
     const quickChoices = html.match(
       /<fieldset aria-label="Expiry quick choices"[^>]*>(.*?)<\/fieldset>/,
     )?.[1];
-    expect(quickChoices?.match(/<button /g)).toHaveLength(7);
+    expect(quickChoices?.match(/<button /g)).toHaveLength(8);
     expect(html).not.toContain("NYSE calendar unsupported");
     expect(html.indexOf('value="DRAM"')).toBeLessThan(html.indexOf('value="AAPL"'));
     expect(html).toContain('value="wheel"');
@@ -124,7 +137,9 @@ describe("TradeForm", () => {
       expect(html).toContain(
         `role="status">NYSE calendar unsupported for these expiry quick choices (coverage: ${FIRST_YEAR}–${LAST_YEAR}). Enter an expiry date manually.`,
       );
-      expect(html).toMatch(/<fieldset aria-label="Expiry quick choices"[^>]*><\/fieldset>/);
+      expect(html).toMatch(
+        /<fieldset aria-label="Expiry quick choices"[^>]*><button[^>]*>Other…<\/button><\/fieldset>/,
+      );
       expect(html).toContain(">Save trade</button>");
       expect(html).toContain(">Cancel</button>");
     },
@@ -247,7 +262,7 @@ describe("TradeForm role default", () => {
         onCancel={() => {}}
       />,
     );
-  const control = (tree: ReactNode, type: "input" | "select", label: string) => {
+  const control = (tree: ReactNode, type: "input" | "select" | "textarea", label: string) => {
     const labelled = elements(tree).find(
       (el) => el.type === "label" && text(el.props.children).startsWith(label),
     );
@@ -255,12 +270,14 @@ describe("TradeForm role default", () => {
     if (!el) throw new Error(`Missing ${type} ${label}`);
     return el;
   };
-  const roleSelects = (tree: ReactNode) =>
+  const roleControls = (tree: ReactNode) =>
     elements(tree).filter(
-      (el) =>
-        el.type === "select" && elements(el.props.children).some((o) => o.props.value === "hedge"),
+      (el) => el.type === "button" && ["Hedge", "Swing"].includes(text(el.props.children)),
     );
-  const roleValue = () => roleSelects(render())[0]?.props.value;
+  const roleValue = () => {
+    const selected = roleControls(render()).find((el) => el.props["aria-pressed"] === true);
+    return selected ? text(selected.props.children).toLowerCase() : undefined;
+  };
   const choose = (strategy: keyof typeof STRATEGY_LABELS) => {
     const chip = elements(render()).find(
       (el) => el.type === "button" && text(el.props.children) === STRATEGY_LABELS[strategy],
@@ -269,11 +286,13 @@ describe("TradeForm role default", () => {
     (chip.props.onClick as () => void)();
   };
   const pickRole = (value: string) => {
-    const select = roleSelects(render())[0];
-    if (!select) throw new Error("Missing Role select");
-    (select.props.onChange as (event: unknown) => void)({ target: { value } });
+    const button = roleControls(render()).find(
+      (el) => text(el.props.children).toLowerCase() === value,
+    );
+    if (!button) throw new Error("Missing Role button");
+    (button.props.onClick as () => void)();
   };
-  const typeInto = (type: "input" | "select", label: string, value: string) =>
+  const typeInto = (type: "input" | "select" | "textarea", label: string, value: string) =>
     (control(render(), type, label).props.onChange as (event: unknown) => void)({
       target: { value },
     });
@@ -311,6 +330,62 @@ describe("TradeForm role default", () => {
     expect(roleValue()).toBe("hedge");
   });
 
+  it("names invalid current values without schema text", () => {
+    typeInto("input", "Ticker", "?");
+    typeInto("input", "Strike", "0");
+    typeInto("input", "Fill price", "bad");
+    const html = renderToStaticMarkup(render());
+    expect(html).toContain("Needs ticker, strike, fill");
+    expect(html).not.toContain("Invalid string");
+    expect(html).not.toContain("must match pattern");
+    expect(html).not.toContain("Must be greater than zero");
+  });
+
+  it("orders debit and credit legs and keeps their fee summaries independent", () => {
+    typeInto("input", "Fees", "1.23");
+    choose("put_debit_spread");
+    let html = renderToStaticMarkup(render());
+    expect(html.indexOf("Long strike")).toBeLessThan(html.indexOf("Short strike"));
+    expect(html).toContain("Fees $0.65 per leg (0.65 × 1)");
+    expect(html).not.toContain("$1.23");
+    typeInto("input", "Long fees", "2.00");
+    html = renderToStaticMarkup(render());
+    expect(html).toContain("Fees $2.00 / $0.65 (long / short)");
+    choose("put_credit_spread");
+    html = renderToStaticMarkup(render());
+    expect(html.indexOf("Short strike")).toBeLessThan(html.indexOf("Long strike"));
+    choose("csp");
+    expect(renderToStaticMarkup(render())).toContain("Fees $1.23");
+  });
+
+  it("reveals manual expiry and always displays an off-chip selection", () => {
+    const press = (name: string) => {
+      const button = elements(render()).find(
+        (el) => el.type === "button" && text(el.props.children) === name,
+      );
+      if (!button) throw new Error(`Missing expiry chip ${name}`);
+      (button.props.onClick as () => void)();
+    };
+    press("Other…");
+    typeInto("input", "Expiry", "2026-12-18");
+    expect(renderToStaticMarkup(render())).toContain("Selected expiry: 2026-12-18");
+    press("Other…");
+    expect(control(render(), "input", "Expiry").props.value).toBe("2026-12-18");
+    press("10-16 M 21d");
+    const html = renderToStaticMarkup(render());
+    expect(html).toContain("Selected expiry: 2026-10-16");
+    expect(html).not.toContain("<label>Expiry<input");
+  });
+
+  it("uses Shares for stock and keeps its zero fee default", () => {
+    choose("stock");
+    const html = renderToStaticMarkup(render());
+    expect(html).toContain("<label>Shares<input");
+    expect(html).toContain("Fees $0.00");
+    expect(html).not.toContain("Expiry quick choices");
+    expect(html).not.toContain("<table");
+  });
+
   it("submits the role the user picked on a call-side strategy", async () => {
     vi.mocked(createTrade).mockResolvedValue(undefined as never);
     choose("long_call");
@@ -324,12 +399,58 @@ describe("TradeForm role default", () => {
     );
   });
 
+  it("preserves the covered-call payload including optional metadata", async () => {
+    vi.mocked(createTrade).mockResolvedValue(undefined as never);
+    choose("cc");
+    typeInto("input", "Ticker", "DRAM");
+    typeInto("input", "Strike", "55");
+    typeInto("input", "Fill price", "1.10");
+    typeInto("select", "Covered shares", "held");
+    typeInto("input", "Share basis", "53");
+    typeInto("textarea", "Notes", "Income trade");
+    typeInto("input", "Tags", "remove");
+    const tagInput = control(render(), "input", "Tags");
+    (tagInput.props.onKeyDown as (event: unknown) => void)({
+      key: "Enter",
+      preventDefault: () => {},
+    });
+    const remove = elements(render()).find((el) => el.props["aria-label"] === "Remove tag remove");
+    if (!remove) throw new Error("Missing remove tag");
+    (remove.props.onClick as () => void)();
+    typeInto("input", "Tags", "wheel");
+    const add = elements(render()).find(
+      (el) => el.type === "button" && text(el.props.children) === "Add tag",
+    );
+    if (!add) throw new Error("Missing Add tag");
+    (add.props.onClick as () => void)();
+    const adjusted = elements(render()).find(
+      (el) => el.type === "input" && el.props.type === "checkbox",
+    );
+    if (!adjusted) throw new Error("Missing adjusted contract");
+    (adjusted.props.onChange as (event: unknown) => void)({ target: { checked: true } });
+    await submit();
+    expect(createTrade).toHaveBeenCalledWith({
+      strategy: "cc",
+      underlying: "DRAM",
+      openedOn: "2026-09-25",
+      expiry: "2026-10-02",
+      quantity: 1,
+      strike: "55",
+      price: "1.10",
+      fees: "0.65",
+      adjusted: true,
+      cover: { kind: "held", basis: "53" },
+      tags: ["wheel"],
+      notes: "Income trade",
+    });
+  });
+
   it("omits role for strategies without one", async () => {
     vi.mocked(createTrade).mockResolvedValue(undefined as never);
     typeInto("input", "Ticker", "QQQ");
     typeInto("input", "Strike", "600");
     typeInto("input", "Fill price", "1.50");
-    expect(roleSelects(render())).toHaveLength(0);
+    expect(roleControls(render())).toHaveLength(0);
     await submit();
     expect(createTrade).toHaveBeenCalledWith(expect.objectContaining({ strategy: "csp" }));
     expect(vi.mocked(createTrade).mock.calls[0]?.[0]).not.toHaveProperty("role");
@@ -389,6 +510,7 @@ describe("TradeForm dirty signal", () => {
     ["Share basis", "10"],
   ])("reports a change to %s as dirty", (label, value) => {
     if (label === "Share basis") press(STRATEGY_LABELS.cc);
+    if (label === "Expiry") press("Other…");
     typeInto(label, value);
     expect(reported()).toBe(true);
   });
@@ -417,12 +539,7 @@ describe("TradeForm dirty signal", () => {
   it("reports a picked role that differs from the side default as dirty", () => {
     press(STRATEGY_LABELS.long_put);
     expect(reported()).toBe(true);
-    const select = elements(render()).find(
-      (el) =>
-        el.type === "select" && elements(el.props.children).some((o) => o.props.value === "hedge"),
-    );
-    if (!select) throw new Error("Missing Role select");
-    (select.props.onChange as (event: unknown) => void)({ target: { value: "swing" } });
+    press("Swing");
     press(STRATEGY_LABELS.csp);
     expect(reported()).toBe(false);
   });

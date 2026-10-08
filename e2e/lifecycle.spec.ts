@@ -130,6 +130,7 @@ test("DRAM assignment opens the real prefilled CC form and saves against the sam
   );
   await expect(form.getByLabel("Ticker", { exact: true })).toHaveValue("DRAM");
   await expect(form.getByLabel("Quantity", { exact: true })).toHaveValue("15");
+  await form.getByText("Tags, notes, opened date, adjusted contract", { exact: true }).click();
   await expect(form.getByLabel("Opened on", { exact: true })).toHaveValue("2026-10-16");
   await expect(form.getByRole("combobox", { name: "Covered shares", exact: true })).toHaveValue(
     stockLegId ?? "",
@@ -147,7 +148,9 @@ test("DRAM assignment opens the real prefilled CC form and saves against the sam
   await expect(form.getByLabel("Share basis", { exact: true })).toHaveValue("53.0000");
   await form.getByLabel("Strike", { exact: true }).fill("55");
   await form.getByLabel("Fill price", { exact: true }).fill("1.10");
+  await form.getByRole("button", { name: "Other…", exact: true }).click();
   await form.getByLabel("Expiry", { exact: true }).fill("2026-11-20");
+  await form.locator(".trade-fee-editor summary").click();
   await form.getByLabel("Fees", { exact: true }).fill("9.75");
   const saved = page.waitForResponse(
     (response) =>
