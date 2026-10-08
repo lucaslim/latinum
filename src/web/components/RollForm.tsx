@@ -10,7 +10,7 @@ import { type Metrics, positionMetrics, spreadMaxPayout } from "../../domain/pos
 import { previewRoll, rollExpiryChips } from "../../domain/roll.ts";
 import { createPositionSchema } from "../../shared/trade.ts";
 import { requestToPosition } from "../../shared/tradePosition.ts";
-import { defaultFee, feeToApi } from "../fees.ts";
+import { defaultFeeInput, feeToApi } from "../fees.ts";
 import { percent, shortDate, usd } from "../format.ts";
 import type { SaveLifecycle } from "../lifecycleApi.ts";
 import "./roll.css";
@@ -39,7 +39,7 @@ function initialFills(position: CampaignPosition): FillFields[] {
     const entry = leg.trades.findLast((trade) => trade.action === "open")?.price;
     if (entry === undefined || leg.strike === null)
       throw new Error("Option has no opening price or strike");
-    const fee = defaultFee(openLegQuantity(leg));
+    const fee = defaultFeeInput(openLegQuantity(leg));
     return {
       legId: leg.id,
       closePrice: formatMoney4(leg.mark?.price ?? entry),

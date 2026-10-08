@@ -3,10 +3,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { nvdlCampaign } from "../../domain/test/campaignFixtures.ts";
 import { LifecycleActions } from "./LifecycleActions.tsx";
 
-const state = vi.hoisted(() => ({ values: [] as unknown[] }));
+const state = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }));
 vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
-  useState: () => [state.values.shift(), vi.fn()],
+  useState(initial: unknown) {
+    const index = state.index++;
+    if (!(index in state.values))
+      state.values[index] = typeof initial === "function" ? initial() : initial;
+    return [
+      state.values[index],
+      (value: unknown) => {
+        state.values[index] = typeof value === "function" ? value(state.values[index]) : value;
+      },
+    ];
+  },
   useRef: (initial: unknown) => ({ current: initial }),
   useEffect: vi.fn(),
 }));
@@ -174,6 +184,7 @@ describe("Lifecycle revisions", () => {
       const legId = position.legs[0]?.id;
       if (!legId) throw new Error("Missing lifecycle fixture leg");
       state.values = [{ action, legId }, [legId], false, null];
+      state.index = 0;
       const fields = new Map([
         ["tradeDate", "2026-10-16"],
         ["fees", "2.00"],
@@ -226,17 +237,47 @@ describe("Lifecycle revisions", () => {
     if (!fixture || !leg) throw new Error("Missing lifecycle fixture");
     const render = (action: "close" | "assign") => {
       state.values = [{ action, legId: leg.id }, [leg.id], false, null];
+      state.index = 0;
       return findInputs(LifecycleActions({ position: fixture, onSave: vi.fn() }));
     };
     const closeFees = render("close").find((input) => input.name === `fees-${leg.id}`);
     const assignFees = render("assign").find((input) => input.name === "fees");
-    expect(closeFees?.defaultValue).toBe("3.25");
+    expect(closeFees?.value).toBe("3.25");
     expect(assignFees?.defaultValue).toBe("0");
     for (const input of [closeFees, assignFees]) {
       const accepts = (value: string) => new RegExp(`^(?:${String(input?.pattern)})$`).test(value);
       expect(accepts("1.30")).toBe(true);
       expect(accepts("-1.30")).toBe(false);
     }
+  });
+
+  it("makes an unedited close fee follow the closing quantity until the fee is typed in", () => {
+    const fixture = nvdlCampaign.positions[0];
+    const leg = fixture?.legs[0];
+    if (!fixture || !leg) throw new Error("Missing lifecycle fixture");
+    const render = () => {
+      state.index = 0;
+      return findInputs(LifecycleActions({ position: fixture, onSave: vi.fn() }));
+    };
+    const field = (name: string) => {
+      const input = render().find((candidate) => candidate.name === name);
+      if (!input) throw new Error(`Missing input ${name}`);
+      return input;
+    };
+    const type = (name: string, value: string) => {
+      const onChange = field(name).onChange as ((event: unknown) => void) | undefined;
+      if (!onChange) throw new Error(`Input ${name} is not tracked`);
+      onChange({ target: { value } });
+    };
+    state.values = [{ action: "close" }, [leg.id], false, null];
+    expect(field(`fees-${leg.id}`).value).toBe("3.25");
+    type(`quantity-${leg.id}`, "2");
+    expect(field(`fees-${leg.id}`).value).toBe("1.30");
+    type(`quantity-${leg.id}`, "");
+    expect(field(`fees-${leg.id}`).value).toBe("1.30");
+    type(`fees-${leg.id}`, "9.99");
+    type(`quantity-${leg.id}`, "4");
+    expect(field(`fees-${leg.id}`).value).toBe("9.99");
   });
 
   it.each([

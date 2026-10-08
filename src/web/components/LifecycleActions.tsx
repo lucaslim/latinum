@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CampaignLeg, CampaignPosition } from "../../domain/campaign.ts";
 import { openLegQuantity } from "../../domain/campaignMetrics.ts";
 import { formatMoney4 } from "../../domain/money.ts";
-import { defaultFee, feeToApi } from "../fees.ts";
+import { defaultFeeInput, feeToApi } from "../fees.ts";
 import type { LifecycleMutation, SaveLifecycle } from "../lifecycleApi.ts";
 import "./lifecycle.css";
 
@@ -27,6 +27,9 @@ export function LifecycleActions({
   const [included, setIncluded] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Closing quantity per leg once the user has typed a valid one; an edited fee stops following it.
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [editedFees, setEditedFees] = useState<Record<string, string>>({});
   const inFlight = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -48,6 +51,8 @@ export function LifecycleActions({
     setMode(next);
     setIncluded(openLegs.map((leg) => leg.id));
     setError(null);
+    setQuantities({});
+    setEditedFees({});
   }
   return (
     <section
@@ -189,6 +194,16 @@ export function LifecycleActions({
                           max={openLegQuantity(leg)}
                           step="1"
                           defaultValue={openLegQuantity(leg)}
+                          onChange={(event) => {
+                            const quantity = Number(event.target.value);
+                            if (
+                              event.target.value !== "" &&
+                              Number.isInteger(quantity) &&
+                              quantity >= 1 &&
+                              quantity <= openLegQuantity(leg)
+                            )
+                              setQuantities((current) => ({ ...current, [leg.id]: quantity }));
+                          }}
                           required
                         />
                       </label>
@@ -209,7 +224,16 @@ export function LifecycleActions({
                           type="text"
                           inputMode="decimal"
                           pattern="[0-9]+(\.[0-9]{1,4})?"
-                          defaultValue={defaultFee(openLegQuantity(leg))}
+                          value={
+                            editedFees[leg.id] ??
+                            defaultFeeInput(quantities[leg.id] ?? openLegQuantity(leg))
+                          }
+                          onChange={(event) =>
+                            setEditedFees((current) => ({
+                              ...current,
+                              [leg.id]: event.target.value,
+                            }))
+                          }
                           required
                         />
                       </label>

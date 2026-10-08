@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultFee, feeToApi } from "./fees.ts";
+import { defaultFeeInput, feeToApi } from "./fees.ts";
 
 describe("fees", () => {
   it.each([
@@ -18,6 +18,6 @@ describe("fees", () => {
     [1, "0.65"],
     [10, "6.50"],
   ])("defaults %i contracts to %s", (contracts, expected) => {
-    expect(defaultFee(contracts)).toBe(expected);
+    expect(defaultFeeInput(contracts)).toBe(expected);
   });
 });
