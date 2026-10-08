@@ -15,13 +15,16 @@ test.afterEach(async ({ request }) => {
 // Answers every native dialog the same way until told otherwise, and records what was asked.
 function watchDialogs(page: Page) {
   const messages: string[] = [];
+  const types: string[] = [];
   let answer: "accept" | "dismiss" = "dismiss";
   page.on("dialog", (dialog) => {
     messages.push(dialog.message());
+    types.push(dialog.type());
     return answer === "accept" ? dialog.accept() : dialog.dismiss();
   });
   return {
     messages,
+    types,
     accept: () => {
       answer = "accept";
     },
@@ -368,6 +371,40 @@ test.describe("leaving the new trade screen", () => {
     await page.goBack();
     await expect(page).toHaveURL("/");
     expect(dialogs.messages).toEqual([DISCARD, DISCARD]);
+  });
+
+  test("Stay never reloads when an older entry shares the form's ordinal", async ({ page }) => {
+    const dialogs = watchDialogs(page);
+    await page.addInitScript(() => {
+      const calls: number[] = [];
+      Object.assign(window, { goCalls: calls });
+      const original = history.go.bind(history);
+      history.go = (delta) => {
+        calls.push(delta ?? 0);
+        return original(delta);
+      };
+    });
+    await page.goto("/");
+    await page.getByRole("link", { name: "Monthly P/L" }).click();
+    await expect(page).toHaveURL(/#\/pl$/);
+    await page.goBack();
+    await expect(page).toHaveURL("/");
+    // Entries created before ordinals shipped get stamped from whatever the session committed
+    // last, so one can collide with the form's entry (ordinal 2 once the form is opened below).
+    await page.evaluate(() => history.replaceState({ tradingJournalEntry: 2 }, ""));
+    await page.goForward();
+    await expect(page).toHaveURL(/#\/pl$/);
+    await newTradeButton(page).click();
+    await ticker(page).fill("DRAM");
+    await page.getByLabel("Strike", { exact: true }).fill("50");
+    await ticker(page).evaluate((element) => element.setAttribute("data-keep", "1"));
+
+    await page.evaluate(() => history.go(-2));
+    await expect.poll(() => dialogs.messages.length).toBe(1);
+    await expectFormKept(page);
+    expect(dialogs.messages).toEqual([DISCARD]);
+    expect(dialogs.types).toEqual(["confirm"]);
+    expect(await page.evaluate(() => Reflect.get(window, "goCalls"))).toEqual([-2]);
   });
 
   test("beforeunload is registered only while the form has unsaved input", async ({ page }) => {

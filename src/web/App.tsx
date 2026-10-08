@@ -309,7 +309,19 @@ export function App() {
         if (!window.confirm(DISCARD_PROMPT)) {
           // Traversing back to the form's entry (rather than pushing its URL again) leaves the
           // history as it was, and the restoring hashchange lands on the unchanged route.
-          window.history.go(committedEntry.current - entry);
+          const delta = committedEntry.current - entry;
+          if (delta === 0) {
+            // Entries from before ordinals existed can collide with the form's, and `go(0)` would
+            // reload the page: rewrite this entry's URL back to the form instead.
+            const { pathname, search } = window.location;
+            window.history.replaceState(
+              { tradingJournalEntry: committedEntry.current },
+              "",
+              pathname + search + NEW_TRADE_HASH,
+            );
+            return;
+          }
+          window.history.go(delta);
           return;
         }
       }
