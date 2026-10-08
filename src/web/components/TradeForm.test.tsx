@@ -1,5 +1,6 @@
+import { cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FIRST_YEAR, LAST_YEAR } from "../../domain/calendar.ts";
 import { parseIsoDate } from "../../domain/dates.ts";
 import * as expiryModule from "../../domain/expiry.ts";
@@ -7,7 +8,47 @@ import type { Money4 } from "../../domain/money.ts";
 import { positionMetrics } from "../../domain/positions.ts";
 import { STRATEGY_LABELS, TRADE_STRATEGIES } from "../../shared/trade.ts";
 import { previewTrade } from "../../shared/tradeForm.ts";
+import { createTrade } from "../tradeApi.ts";
 import { DerivedTradeMetrics, TradeForm } from "./TradeForm.tsx";
+
+const hooks = vi.hoisted(() => ({
+  slots: new Map<string, unknown[]>(),
+  key: "",
+  index: 0,
+}));
+vi.mock("react", async (original) => ({
+  ...(await original<typeof import("react")>()),
+  useId: () => "id",
+  useState(initial: unknown) {
+    const slots = hooks.slots.get(hooks.key) ?? [];
+    hooks.slots.set(hooks.key, slots);
+    const index = hooks.index++;
+    if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
+    return [
+      slots[index],
+      (value: unknown) => {
+        slots[index] = typeof value === "function" ? value(slots[index]) : value;
+      },
+    ];
+  },
+  useRef(initial: unknown) {
+    const slots = hooks.slots.get(hooks.key) ?? [];
+    hooks.slots.set(hooks.key, slots);
+    const index = hooks.index++;
+    if (!(index in slots)) slots[index] = { current: initial };
+    return slots[index];
+  },
+  useEffect(effect: () => void) {
+    effect();
+  },
+}));
+vi.mock("../tradeApi.ts", () => ({ createTrade: vi.fn() }));
+
+beforeEach(() => {
+  hooks.slots.clear();
+  hooks.key = "";
+  hooks.index = 0;
+});
 
 describe("TradeForm", () => {
   it.each([1500, 1599])(
@@ -172,5 +213,125 @@ describe("TradeForm", () => {
     expect(stockHtml).toContain("Capital");
     expect(stockHtml).toContain("$22,760");
     expect(stockHtml).not.toContain("Yield");
+  });
+});
+
+type ElementProps = { children?: ReactNode; [key: string]: unknown };
+function expand(node: ReactNode, path = "root"): ReactNode {
+  if (Array.isArray(node)) return node.map((child, i) => expand(child, `${path}/${i}`));
+  if (!isValidElement<ElementProps>(node)) return node;
+  if (typeof node.type === "function") {
+    hooks.key = `${path}/${node.type.name}:${node.key}`;
+    hooks.index = 0;
+    return expand((node.type as (props: ElementProps) => ReactNode)(node.props), hooks.key);
+  }
+  return cloneElement(node, {}, expand(node.props.children, `${path}/children`));
+}
+function elements(node: ReactNode): ReactElement<ElementProps>[] {
+  if (Array.isArray(node)) return node.flatMap(elements);
+  return isValidElement<ElementProps>(node) ? [node, ...elements(node.props.children)] : [];
+}
+const text = (node: ReactNode) =>
+  renderToStaticMarkup(node)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+describe("TradeForm role default", () => {
+  const render = () =>
+    expand(
+      <TradeForm
+        asOf={parseIsoDate("2026-09-25")}
+        options={{ tickers: [], tags: [], assignedStock: [] }}
+        onSaved={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+  const control = (tree: ReactNode, type: "input" | "select", label: string) => {
+    const labelled = elements(tree).find(
+      (el) => el.type === "label" && text(el.props.children).startsWith(label),
+    );
+    const el = elements(labelled?.props.children).find((child) => child.type === type);
+    if (!el) throw new Error(`Missing ${type} ${label}`);
+    return el;
+  };
+  const roleSelects = (tree: ReactNode) =>
+    elements(tree).filter(
+      (el) =>
+        el.type === "select" && elements(el.props.children).some((o) => o.props.value === "hedge"),
+    );
+  const roleValue = () => roleSelects(render())[0]?.props.value;
+  const choose = (strategy: keyof typeof STRATEGY_LABELS) => {
+    const chip = elements(render()).find(
+      (el) => el.type === "button" && text(el.props.children) === STRATEGY_LABELS[strategy],
+    );
+    if (!chip) throw new Error(`Missing strategy ${strategy}`);
+    (chip.props.onClick as () => void)();
+  };
+  const pickRole = (value: string) => {
+    const select = roleSelects(render())[0];
+    if (!select) throw new Error("Missing Role select");
+    (select.props.onChange as (event: unknown) => void)({ target: { value } });
+  };
+  const typeInto = (type: "input" | "select", label: string, value: string) =>
+    (control(render(), type, label).props.onChange as (event: unknown) => void)({
+      target: { value },
+    });
+  const submit = async () => {
+    const form = elements(render()).find((el) => el.type === "form");
+    if (!form) throw new Error("Missing form");
+    await (form.props.onSubmit as (event: unknown) => Promise<void>)({ preventDefault: () => {} });
+  };
+
+  it.each([
+    ["call_debit_spread", "swing"],
+    ["long_call", "swing"],
+    ["put_debit_spread", "hedge"],
+    ["long_put", "hedge"],
+  ] as const)("defaults %s to %s", (strategy, role) => {
+    choose(strategy);
+    expect(roleValue()).toBe(role);
+  });
+
+  it.each([
+    ["long_call", "put_debit_spread", "hedge"],
+    ["long_put", "call_debit_spread", "swing"],
+  ] as const)("resets a manual pick when switching %s to %s", (from, to, role) => {
+    choose(from);
+    pickRole(role === "hedge" ? "swing" : "hedge");
+    expect(roleValue()).toBe(role === "hedge" ? "swing" : "hedge");
+    choose(to);
+    expect(roleValue()).toBe(role);
+  });
+
+  it("keeps a manual pick when the selected strategy is clicked again", () => {
+    choose("long_call");
+    pickRole("hedge");
+    choose("long_call");
+    expect(roleValue()).toBe("hedge");
+  });
+
+  it("submits the role the user picked on a call-side strategy", async () => {
+    vi.mocked(createTrade).mockResolvedValue(undefined as never);
+    choose("long_call");
+    typeInto("input", "Ticker", "QQQ");
+    typeInto("input", "Strike", "600");
+    typeInto("input", "Fill price", "1.50");
+    pickRole("hedge");
+    await submit();
+    expect(createTrade).toHaveBeenCalledWith(
+      expect.objectContaining({ strategy: "long_call", role: "hedge" }),
+    );
+  });
+
+  it("omits role for strategies without one", async () => {
+    vi.mocked(createTrade).mockResolvedValue(undefined as never);
+    typeInto("input", "Ticker", "QQQ");
+    typeInto("input", "Strike", "600");
+    typeInto("input", "Fill price", "1.50");
+    expect(roleSelects(render())).toHaveLength(0);
+    await submit();
+    expect(createTrade).toHaveBeenCalledWith(expect.objectContaining({ strategy: "csp" }));
+    expect(vi.mocked(createTrade).mock.calls[0]?.[0]).not.toHaveProperty("role");
   });
 });

@@ -108,7 +108,7 @@ export function TradeForm({
   const [shortPrice, setShortPrice] = useState("");
   const [longFees, setLongFees] = useState<string | null>(null);
   const [shortFees, setShortFees] = useState<string | null>(null);
-  const [role, setRole] = useState<"hedge" | "swing">("hedge");
+  const [pickedRole, setPickedRole] = useState<"hedge" | "swing" | null>(null);
   const [adjusted, setAdjusted] = useState(false);
   const [cover, setCover] = useState(assignedStock?.legId ?? "held");
   const [basis, setBasis] = useState("");
@@ -128,6 +128,7 @@ export function TradeForm({
   const stock = strategy === "stock" || strategy === "day_trade";
   const spread = strategy.endsWith("_spread");
   const hasRole = strategy.includes("debit") || strategy.startsWith("long_");
+  const role = pickedRole ?? (strategy.includes("put") ? "hedge" : "swing");
   const qty = Number(quantity);
   const feeDefault = stock
     ? "0.00"
@@ -213,7 +214,11 @@ export function TradeForm({
               key={value}
               type="button"
               aria-pressed={strategy === value}
-              onClick={() => setStrategy(value)}
+              onClick={() => {
+                if (value === strategy) return;
+                setStrategy(value);
+                setPickedRole(null);
+              }}
             >
               {STRATEGY_LABELS[value]}
             </button>
@@ -264,7 +269,9 @@ export function TradeForm({
               Role
               <select
                 value={role}
-                onChange={(event) => setRole(event.target.value === "swing" ? "swing" : "hedge")}
+                onChange={(event) =>
+                  setPickedRole(event.target.value === "swing" ? "swing" : "hedge")
+                }
               >
                 <option value="hedge">Hedge</option>
                 <option value="swing">Swing</option>
