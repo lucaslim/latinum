@@ -377,7 +377,7 @@ export function App() {
     <div className="frame">
       <div className="app">
         <header className="side">
-          <div className="logo">Trading Journal</div>
+          <div className="logo">Latinum</div>
           <button
             type="button"
             className="new-trade"

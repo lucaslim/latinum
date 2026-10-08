@@ -12,8 +12,8 @@ export default defineConfig({
       useCredentials: true,
       includeAssets: ["apple-touch-icon.png"],
       manifest: {
-        name: "Trading Journal",
-        short_name: "Journal",
+        name: "Latinum",
+        short_name: "Latinum",
         id: "/",
         start_url: "/",
         scope: "/",
