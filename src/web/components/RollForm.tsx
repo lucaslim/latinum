@@ -5,18 +5,12 @@ import { CalendarCoverageError } from "../../domain/calendar.ts";
 import type { CampaignLeg, CampaignPosition, CampaignResponse } from "../../domain/campaign.ts";
 import { buildCampaignView, openLegQuantity } from "../../domain/campaignMetrics.ts";
 import { dte, term } from "../../domain/dates.ts";
-import {
-  divMoney4,
-  formatMoney4,
-  type Money4,
-  mulMoney4,
-  negMoney4,
-  parseMoney4,
-} from "../../domain/money.ts";
+import { divMoney4, formatMoney4, type Money4, negMoney4 } from "../../domain/money.ts";
 import { type Metrics, positionMetrics, spreadMaxPayout } from "../../domain/positions.ts";
 import { previewRoll, rollExpiryChips } from "../../domain/roll.ts";
 import { createPositionSchema } from "../../shared/trade.ts";
 import { requestToPosition } from "../../shared/tradePosition.ts";
+import { defaultFeeInput, feeToApi } from "../fees.ts";
 import { percent, shortDate, usd } from "../format.ts";
 import type { SaveLifecycle } from "../lifecycleApi.ts";
 import "./roll.css";
@@ -45,7 +39,7 @@ function initialFills(position: CampaignPosition): FillFields[] {
     const entry = leg.trades.findLast((trade) => trade.action === "open")?.price;
     if (entry === undefined || leg.strike === null)
       throw new Error("Option has no opening price or strike");
-    const fee = formatMoney4(mulMoney4(parseMoney4("0.65"), openLegQuantity(leg)), 2);
+    const fee = defaultFeeInput(leg.kind, openLegQuantity(leg));
     return {
       legId: leg.id,
       closePrice: formatMoney4(leg.mark?.price ?? entry),
@@ -252,11 +246,6 @@ function RollEditor({
   let lines: [string, string][] = [];
   let invalid: string | null = null;
   try {
-    const charge = (value: string) => {
-      const money = parseMoney4(value);
-      if (money < 0) throw new RangeError("Enter fees as a positive charge or zero");
-      return formatMoney4(negMoney4(money));
-    };
     const raw: RollRequest = {
       positionId: position.id,
       expectedRevision: position.revision,
@@ -264,8 +253,8 @@ function RollEditor({
       expiry,
       fills: fills.map((fill) => ({
         ...fill,
-        closeFees: charge(fill.closeFees),
-        openFees: charge(fill.openFees),
+        closeFees: feeToApi(fill.closeFees),
+        openFees: feeToApi(fill.openFees),
       })),
     };
     const input = rollSchema.parse(raw, campaign.asOf);

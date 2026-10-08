@@ -1,0 +1,62 @@
+.search-combobox {
+  position: relative;
+  min-width: 0;
+}
+.combo-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin-top: var(--sp-1);
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.combo-group {
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.combo-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.combo-option small {
+  color: var(--muted);
+}
+.combo-option:hover,
+.combo-active {
+  background: var(--raise);
+}
+.combo-option[aria-selected="true"] {
+  box-shadow: inset 3px 0 var(--accent);
+}
+.combo-credit {
+  color: var(--credit);
+}
+.combo-debit {
+  color: var(--debit);
+}
+.trade-entry-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 80px;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+@media (max-width: 600px) {
+  .trade-entry-fields {
+    grid-template-columns: minmax(0, 1fr) 80px;
+  }
+  .trade-entry-fields > .search-combobox:first-child {
+    grid-column: 1 / -1;
+  }
+}

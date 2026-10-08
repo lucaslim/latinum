@@ -1,5 +1,21 @@
 import { expect, type Page, test } from "@playwright/test";
-import { STRATEGY_LABELS, TRADE_STRATEGIES } from "../src/shared/trade.ts";
+
+const strategyNames = [
+  "Cash-secured put",
+  "Covered call",
+  "Put credit spread",
+  "Call credit spread",
+  "Put debit spread",
+  "Call debit spread",
+  "Long put",
+  "Long call",
+  "Stock",
+  "Day trade",
+];
+async function pickStrategy(page: Page, name: string) {
+  await page.getByRole("combobox", { name: "Strategy", exact: true }).click();
+  await page.getByRole("option", { name: new RegExp(`^${name}(?: |$)`) }).click();
+}
 
 const viewports = [
   { width: 1400, height: 900, sheet: "sheet-table", rows: "tbody tr", footer: "tfoot" },
@@ -39,13 +55,15 @@ async function expectSameDocument(page: Page) {
       () => (window as Window & { __t6DocumentSentinel?: string }).__t6DocumentSentinel,
     ),
   ).toBe("trade-form-document");
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/#/");
 }
 
 async function fillDramPut(page: Page) {
-  await page.getByRole("button", { name: "CSP", exact: true }).click();
+  await pickStrategy(page, "Cash-secured put");
   await page.getByLabel("Ticker", { exact: true }).fill("DRAM");
+  await page.getByText("Tags, notes, opened date, adjusted contract", { exact: true }).click();
   await page.getByLabel("Opened on", { exact: true }).fill("2026-09-25");
+  await page.getByRole("button", { name: "Other…", exact: true }).click();
   await page.getByLabel("Expiry", { exact: true }).fill("2026-10-09");
   await page.getByLabel("Quantity", { exact: true }).fill("10");
   await page.getByLabel("Strike", { exact: true }).fill("50");
@@ -70,8 +88,9 @@ for (const { width, height, sheet, rows, footer } of viewports) {
           "trade-form-document";
       });
 
-      await page.getByRole("button", { name: "Add trade", exact: true }).click();
+      await page.getByRole("button", { name: "New trade", exact: true }).click();
       await fillDramPut(page);
+      await page.locator(".trade-fee-editor summary").click();
       await expect(page.getByLabel("Fees", { exact: true })).toHaveValue("6.50");
 
       const derived = page.getByRole("region", { name: "Derived trade metrics" });
@@ -138,37 +157,49 @@ for (const { width, height, sheet, rows, footer } of viewports) {
         await route.fulfill({ response, json: { ...(await response.json()), asOf: "2026-03-27" } });
       });
       await page.goto("/");
-      await page.getByRole("button", { name: "Add trade", exact: true }).click();
+      await page.getByRole("button", { name: "New trade", exact: true }).click();
       const expiryChoices = page.getByRole("group", { name: "Expiry quick choices" });
       await expect(expiryChoices.getByRole("button")).toHaveText([
-        "2026-04-02",
-        "2026-04-10",
-        "2026-04-17 M",
-        "2026-04-24",
-        "2026-05-01",
-        "2026-05-08",
-        "2026-05-15 M",
+        "04-02 6d",
+        "04-10 14d",
+        "04-17 M 21d",
+        "04-24 28d",
+        "05-01 35d",
+        "05-08 42d",
+        "05-15 M 49d",
+        "Other…",
       ]);
-      await expiryChoices.getByRole("button", { name: "2026-04-17 M", exact: true }).click();
-      await expect(page.getByLabel("Expiry", { exact: true })).toHaveValue("2026-04-17");
-      await expiryChoices.getByRole("button", { name: "2026-04-02", exact: true }).click();
-      await expect(page.getByLabel("Expiry", { exact: true })).toHaveValue("2026-04-02");
-      const strategies = page
-        .getByRole("group", { name: "Strategy", exact: true })
-        .locator(":scope > .trade-chips")
-        .first();
-      await expect(strategies.getByRole("button", { pressed: true })).toHaveCount(1);
-      await expect(strategies.getByRole("button")).toHaveCount(10);
+      await expiryChoices.getByRole("button", { name: "04-17 M 21d", exact: true }).click();
+      await expect(page.getByText("Selected expiry: 2026-04-17", { exact: true })).toBeVisible();
+      await expiryChoices.getByRole("button", { name: "04-02 6d", exact: true }).click();
+      await expect(page.getByText("Selected expiry: 2026-04-02", { exact: true })).toBeVisible();
+      const strategies = page.getByRole("combobox", { name: "Strategy", exact: true });
+      await strategies.click();
+      await expect(
+        page
+          .getByRole("listbox", { name: "Strategy choices" })
+          .getByRole("option", { selected: true }),
+      ).toHaveCount(1);
+      await expect(
+        page.getByRole("listbox", { name: "Strategy choices" }).getByRole("option"),
+      ).toHaveCount(10);
+      await strategies.press("Escape");
       await page.screenshot({ path: `.verify/trade-expiry-${width}.png`, fullPage: true });
-      for (const strategy of TRADE_STRATEGIES) {
-        const chip = page.getByRole("button", { name: STRATEGY_LABELS[strategy], exact: true });
-        await chip.click();
-        await expect(chip).toHaveAttribute("aria-pressed", "true");
-        await expect(strategies.getByRole("button", { pressed: true })).toHaveCount(1);
+      for (const strategy of strategyNames) {
+        await pickStrategy(page, strategy);
+        await expect(strategies).toHaveValue(strategy);
+        await strategies.click();
+        await expect(
+          page
+            .getByRole("listbox", { name: "Strategy choices" })
+            .getByRole("option", { selected: true }),
+        ).toHaveCount(1);
+        await strategies.press("Escape");
         await expectNoOverflow(page);
       }
-      await page.getByRole("button", { name: "CSP", exact: true }).click();
+      await pickStrategy(page, "Cash-secured put");
       await page.getByLabel("Quantity", { exact: true }).fill("10");
+      await page.locator(".trade-fee-editor summary").click();
       const fees = page.getByLabel("Fees", { exact: true });
       await expect(fees).toHaveValue("6.50");
       await page.getByLabel("Quantity", { exact: true }).fill("15");
@@ -176,6 +207,97 @@ for (const { width, height, sheet, rows, footer } of viewports) {
       await fees.fill("1.23");
       await page.getByLabel("Quantity", { exact: true }).fill("10");
       await expect(fees).toHaveValue("1.23");
+    });
+  });
+}
+
+test("searchable strategy keyboard selection restores queries and resets Role", async ({
+  page,
+}) => {
+  await page.goto("/#/trades/new");
+  const strategy = page.getByRole("combobox", { name: "Strategy", exact: true });
+  await strategy.fill("bear");
+  await strategy.press("ArrowDown");
+  await strategy.press("ArrowDown");
+  await strategy.press("Enter");
+  await expect(strategy).toHaveValue("Put debit spread");
+  await expect(page.getByRole("button", { name: "Hedge", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "Swing", exact: true }).click();
+  await strategy.fill("LC");
+  await page.getByRole("option", { name: "Long call LC", exact: true }).click();
+  await strategy.fill("bear put");
+  await strategy.press("ArrowDown");
+  await strategy.press("Enter");
+  await expect(page.getByRole("button", { name: "Hedge", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await strategy.fill("wheel");
+  await strategy.press("Escape");
+  await expect(strategy).toHaveValue("Put debit spread");
+  await expect(strategy).toHaveAttribute("aria-expanded", "false");
+  const ticker = page.getByRole("combobox", { name: "Ticker", exact: true });
+  await ticker.fill("xyzz");
+  await page.getByRole("option", { name: "Use XYZZ", exact: true }).click();
+  await expect(ticker).toHaveValue("XYZZ");
+  await ticker.fill("abc");
+  await ticker.press("Escape");
+  await expect(ticker).toHaveValue("XYZZ");
+});
+
+for (const width of [1280, 390]) {
+  test.describe(`Order ticket at ${width}px`, () => {
+    test.use({ viewport: { width, height: 1000 } });
+    test("lays out a put debit spread and CSP without overflow", async ({ page }) => {
+      await page.route("**/api/positions?status=open", async (route) => {
+        const response = await route.fetch();
+        await route.fulfill({ response, json: { ...(await response.json()), asOf: "2026-10-07" } });
+      });
+      await page.goto("/#/trades/new");
+      const form = page.getByRole("form", { name: "Add trade" });
+      await expect(form).toContainText("Needs ticker, strike, fill");
+      await expect(form).not.toContainText("Invalid string");
+      await pickStrategy(page, "Put debit spread");
+      await expect(form).toContainText("Needs ticker, strikes, fills");
+      await page.getByLabel("Ticker", { exact: true }).fill("SPY");
+      await page.getByLabel("Long strike", { exact: true }).fill("730");
+      await page.getByLabel("Short strike", { exact: true }).fill("725");
+      await page.getByLabel("Long fill price", { exact: true }).fill("0.92");
+      await page.getByLabel("Short fill price", { exact: true }).fill("0.40");
+      await page.getByRole("button", { name: "10-16 M 9d", exact: true }).click();
+      await expect(form.locator(".trade-headline")).toHaveText("SPY 730/725p 10-16 ×1");
+      await expect(form.locator(".trade-legs tbody th")).toHaveText(["Buy Put", "Sell Put"]);
+      const role = page.getByRole("group", { name: "Role", exact: true });
+      await expect(role.getByRole("button", { name: "Hedge" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await expect(form).toContainText("Fees $0.65 per leg (0.65 × 1)");
+      await expect(form.locator(".trade-extra")).not.toHaveAttribute("open");
+      const main = await form.locator(".trade-main").boundingBox();
+      const summary = await form.locator(".trade-summary").boundingBox();
+      expect(main).not.toBeNull();
+      expect(summary).not.toBeNull();
+      if (!main || !summary) throw new Error("Missing order ticket columns");
+      if (width === 1280) expect(summary.x).toBeGreaterThan(main.x + main.width);
+      else expect(summary.y).toBeGreaterThan(main.y + main.height);
+      await expectNoOverflow(page);
+
+      await pickStrategy(page, "Cash-secured put");
+      await page.getByLabel("Ticker", { exact: true }).fill("DRAM");
+      await page.getByLabel("Quantity", { exact: true }).fill("10");
+      await page.getByLabel("Strike", { exact: true }).fill("50");
+      await page.getByLabel("Fill price", { exact: true }).fill("1.85");
+      await expect(form.locator(".trade-legs tbody th")).toHaveText(["Sell Put"]);
+      await expect(form.locator(".trade-headline")).toHaveText("DRAM 50p 10-16 ×10");
+      await expect(page.getByRole("region", { name: "Derived trade metrics" })).toContainText(
+        /Premium\s*\$1,850/,
+      );
+      await expect(page.getByRole("button", { name: "Save trade", exact: true })).toBeEnabled();
+      await expectNoOverflow(page);
     });
   });
 }

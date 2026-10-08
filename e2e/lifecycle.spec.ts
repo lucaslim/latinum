@@ -55,6 +55,7 @@ test("partial close of five MUU contracts refreshes without reload and books pro
   await page.getByRole("button", { name: "Close MUU position", exact: true }).click();
   await page.getByLabel("Quantity for MUU short put 25.00", { exact: true }).fill("5");
   await page.getByLabel("Close price for MUU short put 25.00", { exact: true }).fill("0");
+  await page.getByLabel("Close fees (charge) for MUU short put 25.00", { exact: true }).fill("0");
   await page.getByLabel("Trade date", { exact: true }).fill("2026-10-16");
   const saved = page.waitForResponse((response) =>
     response.url().endsWith(`/positions/${fixtures.muu.positionId}/close`),
@@ -68,11 +69,29 @@ test("partial close of five MUU contracts refreshes without reload and books pro
   );
 });
 
+test("choosing Close again rebuilds the quantity, price and fee defaults", async ({ page }) => {
+  await page.goto(`/#/campaigns/${fixtures.muu.campaignId}`);
+  const chooseClose = page.getByRole("button", { name: "Close MUU position", exact: true });
+  await chooseClose.click();
+  const quantity = page.getByLabel("Quantity for MUU short put 25.00", { exact: true });
+  const price = page.getByLabel("Close price for MUU short put 25.00", { exact: true });
+  const fees = page.getByLabel("Close fees (charge) for MUU short put 25.00", { exact: true });
+  await quantity.fill("2");
+  await price.fill("0.40");
+  await expect(fees).toHaveValue("1.30");
+  await chooseClose.click();
+  await expect(quantity).toHaveValue("10");
+  await expect(price).toHaveValue("");
+  await expect(fees).toHaveValue("6.50");
+});
+
 test("SPXL close records both fees and the $537.40 net fixture", async ({ page }) => {
   await page.goto(`/#/campaigns/${fixtures.spxl.campaignId}`);
   await page.getByRole("button", { name: "Close SPXL position", exact: true }).click();
   await page.getByLabel("Close price for SPXL short put 240.00", { exact: true }).fill("0.4000");
-  await page.getByLabel("Close fees for SPXL short put 240.00", { exact: true }).fill("-1.30");
+  await page
+    .getByLabel("Close fees (charge) for SPXL short put 240.00", { exact: true })
+    .fill("1.30");
   await page.getByLabel("Trade date", { exact: true }).fill("2026-10-16");
   await page.getByRole("button", { name: "Record close", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Realized net P/L +$537.40");
@@ -121,12 +140,12 @@ test("DRAM assignment opens the real prefilled CC form and saves against the sam
   await expect(offer).toBeEnabled();
   await offer.click();
   const form = page.getByRole("form", { name: "Add trade", exact: true });
-  await expect(form.getByRole("button", { name: "CC", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
+  await expect(form.getByRole("combobox", { name: "Strategy", exact: true })).toHaveValue(
+    "Covered call",
   );
   await expect(form.getByLabel("Ticker", { exact: true })).toHaveValue("DRAM");
   await expect(form.getByLabel("Quantity", { exact: true })).toHaveValue("15");
+  await form.getByText("Tags, notes, opened date, adjusted contract", { exact: true }).click();
   await expect(form.getByLabel("Opened on", { exact: true })).toHaveValue("2026-10-16");
   await expect(form.getByRole("combobox", { name: "Covered shares", exact: true })).toHaveValue(
     stockLegId ?? "",
@@ -144,7 +163,9 @@ test("DRAM assignment opens the real prefilled CC form and saves against the sam
   await expect(form.getByLabel("Share basis", { exact: true })).toHaveValue("53.0000");
   await form.getByLabel("Strike", { exact: true }).fill("55");
   await form.getByLabel("Fill price", { exact: true }).fill("1.10");
+  await form.getByRole("button", { name: "Other…", exact: true }).click();
   await form.getByLabel("Expiry", { exact: true }).fill("2026-11-20");
+  await form.locator(".trade-fee-editor summary").click();
   await form.getByLabel("Fees", { exact: true }).fill("9.75");
   const saved = page.waitForResponse(
     (response) =>
@@ -340,10 +361,12 @@ test("per-leg spread close rejects an unbalanced remainder and records both fill
   await page.getByRole("button", { name: "Close NVDA position", exact: true }).click();
   await page.getByLabel("Include NVDA short put 8.00", { exact: true }).uncheck();
   await page.getByLabel("Close price for NVDA long put 10.00", { exact: true }).fill("1.00");
+  await page.getByLabel("Close fees (charge) for NVDA long put 10.00", { exact: true }).fill("0");
   await page.getByLabel("Trade date", { exact: true }).fill("2026-10-16");
   await page.getByRole("button", { name: "Record close", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("HTTP 400");
   await page.getByLabel("Include NVDA short put 8.00", { exact: true }).check();
+  await page.getByLabel("Close fees (charge) for NVDA short put 8.00", { exact: true }).fill("0");
   await page.getByLabel("Close price for NVDA short put 8.00", { exact: true }).fill("0.10");
   await page.getByRole("button", { name: "Record close", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Realized net P/L −$128.00");
