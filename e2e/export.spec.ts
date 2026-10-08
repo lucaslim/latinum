@@ -16,6 +16,7 @@ const tradeColumns = [
   "rollId",
   "source",
   "createdAt",
+  "realizedPnl",
 ];
 
 for (const viewport of [
@@ -95,7 +96,7 @@ for (const viewport of [
         .map((line) => line.split(","));
       expect(header).toEqual(tradeColumns);
       const csvTrades = records.map((fields) => {
-        expect(fields).toHaveLength(13);
+        expect(fields).toHaveLength(14);
         return Object.fromEntries(tradeColumns.map((column, index) => [column, fields[index]]));
       });
       expect(csvTrades).toHaveLength(backup.tables.trades.length);
@@ -113,6 +114,7 @@ for (const viewport of [
         rollId: "",
         source: "manual",
         createdAt: trade?.createdAt,
+        realizedPnl: "",
       });
     });
   });

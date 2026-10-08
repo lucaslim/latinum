@@ -1,10 +1,9 @@
 # Export and backup
 
-## T11 scope split (2026-10-07)
+## T11 and T11b
 
-This delivery implements JSON backup and raw trade CSV. The derived/realized P/L CSV column
-from `docs/plan.md` T11 is deferred to a follow-up on top of T8's partial-close accounting.
-No P/L allocator, import endpoint, or schema change is included.
+T11 implements JSON backup and raw trade CSV. T11b adds the derived `realizedPnl` CSV
+column using T8's partial-close allocator. No import endpoint or schema change is included.
 
 ## Route contract
 
@@ -23,11 +22,19 @@ timestamps use UTC ISO strings at the existing database adapter's millisecond pr
 Nulls, IDs, tags, relationships, and closed rows are preserved. JSON tables are read in one
 repeatable-read, read-only transaction and sorted by primary key (the composite key for marks).
 
-CSV contains every stored trade column, in `TRADE_CSV_COLUMNS` order, with no derived columns.
-Money is formatted as four-decimal USD amounts rather than scaled integers. Timestamps use
-UTC ISO strings; nullable columns are empty fields. CSV uses CRLF records and standard
-comma/quote/newline escaping. CSV uses one trades-only query sorted by ID and does not depend
-on unrelated backup tables.
+CSV contains every stored trade column followed by `realizedPnl`, in `TRADE_CSV_COLUMNS`
+order. Money is formatted as four-decimal USD amounts rather than scaled integers.
+`realizedPnl` is blank for opening trades; close, expire, assign and exercise trades contain
+net realized P/L from T8's allocator, including `0.0000` for a zero result. Each leg is
+allocated in `tradeDate`, `createdAt`, `id` order, using only preceding opens in a
+weighted-average pool. Opening cash and fees truncate separately for partial closes; the
+final close consumes the remainders, and reopening starts a fresh pool. JSON stays raw.
+
+Timestamps use UTC ISO strings; nullable columns are empty fields. CSV uses CRLF records
+and standard comma/quote/newline escaping. CSV uses one trades-only query sorted by ID and
+does not depend on unrelated backup tables. Allocation does not change CSV row order.
+Invalid histories, such as a close without sufficient preceding opens, fail the CSV export
+at the API error boundary rather than emitting misleading P/L.
 
 The Download control offers JSON backup and raw trade CSV. The automated acceptance test
 restores downloaded JSON into a separately migrated, empty PGlite and checks the plan's seed

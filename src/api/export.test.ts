@@ -42,9 +42,9 @@ test("exports an empty migrated journal as a private JSON attachment", async () 
 });
 
 const csvHeader =
-  "id,legId,action,tradeDate,executedAt,quantity,price,cash,fees,currency,rollId,source,createdAt\r\n";
+  "id,legId,action,tradeDate,executedAt,quantity,price,cash,fees,currency,rollId,source,createdAt,realizedPnl\r\n";
 
-test("an empty book produces only the raw trade CSV header", async () => {
+test("an empty book produces only the raw trade CSV header plus realizedPnl", async () => {
   const { db, client } = await testDatabase();
   try {
     const res = await exportApp((use) => use(db)).request("/api/export?format=csv");
@@ -103,7 +103,7 @@ test.each(["available", "missing"])(
       await db.insert(s.rolls).values({ id: rollId, rollChainId: chainId, rolledOn: "2026-09-30" });
       await db.insert(s.trades).values([
         {
-          id: secondId,
+          id: firstId,
           legId,
           action: "close",
           tradeDate: "2026-10-01",
@@ -114,7 +114,7 @@ test.each(["available", "missing"])(
           createdAt: new Date(at),
         },
         {
-          id: firstId,
+          id: secondId,
           legId,
           action: "open",
           tradeDate: "2026-09-30",
@@ -140,8 +140,8 @@ test.each(["available", "missing"])(
       expect(csv.status).toBe(200);
       expect(await csv.text()).toBe(
         csvHeader +
-          `${firstId},${legId},open,2026-09-30,${at},1,1.0850,108.5000,-0.6527,USD,${rollId},ibkr_flex,${at}\r\n` +
-          `${secondId},${legId},close,2026-10-01,,1,0.0000,-108.5000,0.0000,USD,,manual,${at}\r\n`,
+          `${firstId},${legId},close,2026-10-01,,1,0.0000,-108.5000,0.0000,USD,,manual,${at},-0.6527\r\n` +
+          `${secondId},${legId},open,2026-09-30,${at},1,1.0850,108.5000,-0.6527,USD,${rollId},ibkr_flex,${at},\r\n`,
       );
       expect(queries.mock.calls.map(([query]) => query)).toEqual([
         'select "id", "leg_id", "action", "trade_date", "executed_at", "quantity", "price", "cash", "fees", "currency", "roll_id", "source", "created_at" from "trades" order by "trades"."id"',
@@ -166,8 +166,40 @@ test.each(["available", "missing"])(
           executedAt,
         })),
       ).toEqual([
-        { price: 10850, cash: 1085000, fees: -6527, executedAt: at },
         { price: 0, cash: -1085000, fees: 0, executedAt: null },
+        { price: 10850, cash: 1085000, fees: -6527, executedAt: at },
+      ]);
+      expect(backup.tables.trades.map((row) => Object.keys(row))).toEqual([
+        [
+          "id",
+          "legId",
+          "action",
+          "tradeDate",
+          "executedAt",
+          "quantity",
+          "price",
+          "cash",
+          "fees",
+          "currency",
+          "rollId",
+          "source",
+          "createdAt",
+        ],
+        [
+          "id",
+          "legId",
+          "action",
+          "tradeDate",
+          "executedAt",
+          "quantity",
+          "price",
+          "cash",
+          "fees",
+          "currency",
+          "rollId",
+          "source",
+          "createdAt",
+        ],
       ]);
     } finally {
       await client.close();
@@ -228,6 +260,182 @@ test("CSV serializer quotes commas, quotes, CR and LF in raw string fields", () 
   };
   expect(tradesCsv([row])).toBe(
     csvHeader +
-      `${firstId},${legId},open,2026-09-30,,1,1.0850,108.5000,-0.6527,"a,""b""\r\nc",,manual,${at}\r\n`,
+      `${firstId},${legId},open,2026-09-30,,1,1.0850,108.5000,-0.6527,"a,""b""\r\nc",,manual,${at},\r\n`,
   );
+});
+
+type TradeRow = JournalExport["tables"]["trades"][number];
+
+function tradeRow(
+  id: string,
+  action: TradeRow["action"],
+  quantity: number,
+  cash: number,
+  fees = 0,
+  overrides: Partial<TradeRow> = {},
+): TradeRow {
+  return {
+    id,
+    legId,
+    action,
+    tradeDate: "2026-09-30",
+    executedAt: null,
+    quantity,
+    price: 0,
+    cash,
+    fees,
+    currency: "USD",
+    rollId: null,
+    source: "manual",
+    createdAt: at,
+    ...overrides,
+  };
+}
+
+function realizedRows(rows: TradeRow[]): string[][] {
+  return tradesCsv(rows)
+    .split("\r\n")
+    .slice(1, -1)
+    .map((line) => {
+      const fields = line.split(",");
+      return [fields[0] ?? "", fields.at(-1) ?? ""];
+    });
+}
+
+test.each([
+  ["MUU", 10, 15_000_000, -66_000, "expire", 0, 0, "1493.4000"],
+  ["SPXL", 2, 6_200_000, -13_000, "close", -800_000, -13_000, "537.4000"],
+  ["DRAM", 15, 30_000_000, -99_000, "assign", 0, 0, "2990.1000"],
+] as const)(
+  "CSV reproduces T3 %s per-close net P/L without realizing the opening row",
+  (_name, quantity, cash, fees, action, closingCash, closingFees, expected) => {
+    expect(
+      realizedRows([
+        tradeRow("open", "open", quantity, cash, fees, { tradeDate: "2026-09-01" }),
+        tradeRow("done", action, quantity, closingCash, closingFees),
+      ]),
+    ).toEqual([
+      ["open", ""],
+      ["done", expected],
+    ]);
+  },
+);
+
+test("CSV realizes only the closed half of MUU, leaving the other five contracts unrealized", () => {
+  expect(
+    realizedRows([
+      tradeRow("a-open", "open", 10, 15_000_000, -66_000),
+      tradeRow("b-half", "close", 5, -2_000_000, -33_000),
+    ]),
+  ).toEqual([
+    ["a-open", ""],
+    ["b-half", "543.4000"],
+  ]);
+});
+
+test("CSV keeps independent leg pools while retaining interleaved raw row order", () => {
+  expect(
+    realizedRows([
+      tradeRow("a-muu", "open", 10, 15_000_000, -66_000),
+      tradeRow("b-spxl", "open", 2, 6_200_000, -13_000, { legId: "spxl" }),
+      tradeRow("c-muu", "expire", 10, 0),
+      tradeRow("d-spxl", "close", 2, -800_000, -13_000, { legId: "spxl" }),
+    ]),
+  ).toEqual([
+    ["a-muu", ""],
+    ["b-spxl", ""],
+    ["c-muu", "1493.4000"],
+    ["d-spxl", "537.4000"],
+  ]);
+});
+
+test("CSV allocates chronologically, starts a fresh pool after full close and does not mutate input", () => {
+  const rows = [
+    tradeRow("a-reopen", "open", 2, -9, -3, { tradeDate: "2026-10-01" }),
+    tradeRow("b-close-new", "close", 1, 7, -1, { tradeDate: "2026-10-01" }),
+    tradeRow("old", "open", 3, 10, -5, { tradeDate: "2026-09-01" }),
+    tradeRow("a-old-half", "close", 1, 0),
+    tradeRow("b-old-final", "expire", 2, 0),
+  ];
+  const before = structuredClone(rows);
+  expect(realizedRows(rows)).toEqual([
+    ["a-reopen", ""],
+    ["b-close-new", "0.0001"],
+    ["old", ""],
+    ["a-old-half", "0.0002"],
+    ["b-old-final", "0.0003"],
+  ]);
+  expect(rows).toEqual(before);
+});
+
+test("CSV breaks same-date ties by createdAt then id, never executedAt", () => {
+  const rows = [
+    tradeRow("a-third", "close", 1, 5, -3, {
+      createdAt: "2026-10-01T03:00:00.000Z",
+      executedAt: "2026-09-30T13:00:00.000Z",
+    }),
+    tradeRow("z-open", "open", 3, -10, -5, {
+      createdAt: "2026-10-01T01:00:00.000Z",
+      executedAt: "2026-09-30T16:00:00.000Z",
+    }),
+    tradeRow("c-second", "exercise", 1, 5, -2, {
+      createdAt: "2026-10-01T02:00:00.000Z",
+      executedAt: "2026-09-30T14:00:00.000Z",
+    }),
+    tradeRow("b-first", "close", 1, 5, -1, {
+      createdAt: "2026-10-01T02:00:00.000Z",
+      executedAt: "2026-09-30T15:00:00.000Z",
+    }),
+  ];
+  expect(realizedRows(rows)).toEqual([
+    ["a-third", "-0.0004"],
+    ["z-open", ""],
+    ["c-second", "-0.0002"],
+    ["b-first", "0.0000"],
+  ]);
+});
+
+test("CSV pools multiple opens and only remaining cash and fees with interleaved opens", () => {
+  expect(
+    realizedRows([
+      tradeRow("1-one", "open", 2, 10, -3),
+      tradeRow("2-two", "open", 1, 7, -2),
+      tradeRow("3-partial", "close", 1, -2, -1),
+      tradeRow("4-three", "open", 2, 20, -3),
+      tradeRow("5-next", "close", 2, -4, -2),
+      tradeRow("6-final", "expire", 2, 0),
+    ]),
+  ).toEqual([
+    ["1-one", ""],
+    ["2-two", ""],
+    ["3-partial", "0.0001"],
+    ["4-three", ""],
+    ["5-next", "0.0007"],
+    ["6-final", "0.0012"],
+  ]);
+});
+
+test("CSV truncates debit cash and fees separately and consumes final remainders, including zero and losses", () => {
+  expect(
+    realizedRows([
+      tradeRow("1-open", "open", 3, -10, -5),
+      tradeRow("2-first", "close", 1, 5, -1),
+      tradeRow("3-second", "exercise", 1, 5, -2),
+      tradeRow("4-third", "close", 1, 5, -3),
+    ]),
+  ).toEqual([
+    ["1-open", ""],
+    ["2-first", "0.0000"],
+    ["3-second", "-0.0002"],
+    ["4-third", "-0.0004"],
+  ]);
+});
+
+test("CSV fails loudly when a close has no preceding opens on its own leg", () => {
+  expect(() =>
+    tradesCsv([
+      tradeRow("a-open", "open", 10, 15_000_000, -66_000),
+      tradeRow("b-close", "close", 1, 0, 0, { legId: "other-leg" }),
+    ]),
+  ).toThrow(RangeError);
 });
