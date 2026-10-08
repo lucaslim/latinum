@@ -19,6 +19,9 @@ describe("vite build", () => {
     const html = readFileSync(indexPath, "utf8");
     expect(html).toMatch(/<link[^>]+rel="manifest"[^>]+crossorigin="use-credentials"/);
     const manifest = JSON.parse(readFileSync(join(outDir, "manifest.webmanifest"), "utf8"));
+    expect(html).toContain("<title>Latinum</title>");
+    expect(manifest.name).toBe("Latinum");
+    expect(manifest.short_name).toBe("Latinum");
     expect(manifest.start_url).toBe("/");
     expect(manifest.display).toBe("standalone");
     for (const size of [192, 512]) {

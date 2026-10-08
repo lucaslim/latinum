@@ -23,6 +23,7 @@ test("the positions route offers the button without an inline add form", () => {
   vi.stubGlobal("window", { location: { hash: "" } });
   const html = renderToStaticMarkup(<App />);
   expect(html).toContain("Loading positions");
+  expect(html).toContain('<div class="logo">Latinum</div>');
   expect(html).toContain('aria-label="New trade"');
   expect(html).not.toMatch(/class="new-trade"[^>]*aria-current/);
   expect(html).toContain('href="#/" aria-current="page"');
