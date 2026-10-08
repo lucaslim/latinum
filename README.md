@@ -40,8 +40,9 @@ Production needs two Vercel env vars:
 - `AUTH_PASSWORD_HASH`: `read -rs pw && printf '%s' "$pw" | pnpm -s auth:hash`
 - `SESSION_SECRET`: `openssl rand -base64 32`. Rotating it logs every device out.
 
-If either is missing, login fails with a 500 rather than letting requests through. The local
-API (`pnpm dev`, e2e) uses the password `journal` unless `AUTH_PASSWORD_HASH` is set.
+If either is missing, login fails with a 500 rather than letting requests through. Login has no
+attempt limit, so `auth:hash` refuses passwords under 16 characters: length is the defence
+against guessing. The local API (`pnpm dev`, e2e) uses the password `journal` unless `AUTH_PASSWORD_HASH` is set.
 
 ## Platform checks
 
