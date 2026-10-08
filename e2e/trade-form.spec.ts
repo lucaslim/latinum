@@ -39,7 +39,7 @@ async function expectSameDocument(page: Page) {
       () => (window as Window & { __t6DocumentSentinel?: string }).__t6DocumentSentinel,
     ),
   ).toBe("trade-form-document");
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/#/");
 }
 
 async function fillDramPut(page: Page) {
@@ -70,7 +70,7 @@ for (const { width, height, sheet, rows, footer } of viewports) {
           "trade-form-document";
       });
 
-      await page.getByRole("button", { name: "Add trade", exact: true }).click();
+      await page.getByRole("button", { name: "New trade", exact: true }).click();
       await fillDramPut(page);
       await expect(page.getByLabel("Fees", { exact: true })).toHaveValue("6.50");
 
@@ -138,7 +138,7 @@ for (const { width, height, sheet, rows, footer } of viewports) {
         await route.fulfill({ response, json: { ...(await response.json()), asOf: "2026-03-27" } });
       });
       await page.goto("/");
-      await page.getByRole("button", { name: "Add trade", exact: true }).click();
+      await page.getByRole("button", { name: "New trade", exact: true }).click();
       const expiryChoices = page.getByRole("group", { name: "Expiry quick choices" });
       await expect(expiryChoices.getByRole("button")).toHaveText([
         "2026-04-02",

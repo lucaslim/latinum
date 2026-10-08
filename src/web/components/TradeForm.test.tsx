@@ -335,3 +335,108 @@ describe("TradeForm role default", () => {
     expect(vi.mocked(createTrade).mock.calls[0]?.[0]).not.toHaveProperty("role");
   });
 });
+
+describe("TradeForm dirty signal", () => {
+  const onDirtyChange = vi.fn<(dirty: boolean) => void>();
+  const render = () =>
+    expand(
+      <TradeForm
+        asOf={parseIsoDate("2026-09-25")}
+        options={{ tickers: [], tags: [], assignedStock: [] }}
+        onSaved={() => {}}
+        onCancel={() => {}}
+        onDirtyChange={onDirtyChange}
+      />,
+    );
+  const reported = () => {
+    onDirtyChange.mockClear();
+    render();
+    return onDirtyChange.mock.calls.at(-1)?.[0];
+  };
+  const control = (type: "input" | "select", label: string) => {
+    const labelled = elements(render()).find(
+      (el) => el.type === "label" && text(el.props.children).startsWith(label),
+    );
+    const el = elements(labelled?.props.children).find((child) => child.type === type);
+    if (!el) throw new Error(`Missing ${type} ${label}`);
+    return el;
+  };
+  const typeInto = (label: string, value: string) =>
+    (control("input", label).props.onChange as (event: unknown) => void)({ target: { value } });
+  const press = (label: string) => {
+    const button = elements(render()).find(
+      (el) => el.type === "button" && text(el.props.children) === label,
+    );
+    if (!button) throw new Error(`Missing button ${label}`);
+    (button.props.onClick as () => void)();
+  };
+
+  beforeEach(() => onDirtyChange.mockReset());
+
+  it("reports a pristine form as not dirty", () => {
+    expect(reported()).toBe(false);
+  });
+
+  it.each([
+    ["Ticker", "DRAM"],
+    ["Strike", "50"],
+    ["Fill price", "1.85"],
+    ["Quantity", "2"],
+    ["Opened on", "2026-09-24"],
+    ["Expiry", "2026-10-09"],
+    ["Fees", "9.99"],
+    ["Tags", "wheel"],
+    ["Share basis", "10"],
+  ])("reports a change to %s as dirty", (label, value) => {
+    if (label === "Share basis") press(STRATEGY_LABELS.cc);
+    typeInto(label, value);
+    expect(reported()).toBe(true);
+  });
+
+  it("returns to not dirty when an edited field is restored", () => {
+    typeInto("Ticker", "DRAM");
+    expect(reported()).toBe(true);
+    typeInto("Ticker", "");
+    expect(reported()).toBe(false);
+  });
+
+  it("does not treat a fee typed back to its default as an edit", () => {
+    typeInto("Fees", "9.99");
+    expect(reported()).toBe(true);
+    typeInto("Fees", "0.65");
+    expect(reported()).toBe(false);
+  });
+
+  it("reports a strategy switch as dirty and switching back as pristine", () => {
+    press(STRATEGY_LABELS.stock);
+    expect(reported()).toBe(true);
+    press(STRATEGY_LABELS.csp);
+    expect(reported()).toBe(false);
+  });
+
+  it("reports a picked role that differs from the side default as dirty", () => {
+    press(STRATEGY_LABELS.long_put);
+    expect(reported()).toBe(true);
+    const select = elements(render()).find(
+      (el) =>
+        el.type === "select" && elements(el.props.children).some((o) => o.props.value === "hedge"),
+    );
+    if (!select) throw new Error("Missing Role select");
+    (select.props.onChange as (event: unknown) => void)({ target: { value: "swing" } });
+    press(STRATEGY_LABELS.csp);
+    expect(reported()).toBe(false);
+  });
+
+  it("is optional", () => {
+    expect(() =>
+      expand(
+        <TradeForm
+          asOf={parseIsoDate("2026-09-25")}
+          options={{ tickers: [], tags: [], assignedStock: [] }}
+          onSaved={() => {}}
+          onCancel={() => {}}
+        />,
+      ),
+    ).not.toThrow();
+  });
+});

@@ -228,16 +228,15 @@ describe("manual edit variants", () => {
     });
   });
 
-  it("renders the editor action and an accessible loading/cancel boundary", () => {
+  it("renders nothing until a position is edited, then an accessible loading/cancel boundary", () => {
     const props = {
-      asOf: parseIsoDate("2026-09-25"),
       positions: [position],
       onSaved: () => {},
       editingPositionId: null,
       onEditDone: () => {},
     };
     const closed = renderToStaticMarkup(<TradeEditor {...props} />);
-    expect(closed).toContain("Add trade");
+    expect(closed).toBe("");
     const editing = renderToStaticMarkup(<TradeEditor {...props} editingPositionId="position" />);
     expect(editing).toContain('role="status"');
     expect(editing).toContain("Loading trade details");

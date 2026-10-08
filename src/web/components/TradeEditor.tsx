@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { IsoDate } from "../../domain/dates.ts";
 import {
   absMoney4,
   addMoney4,
@@ -17,11 +16,10 @@ import {
   type ManualTradesResponse,
   type PatchTradeRequest,
   patchTradeSchema,
-  type TradeFormOptions,
 } from "../../shared/trade.ts";
 import { previewTrade, type TradePreview } from "../../shared/tradeForm.ts";
-import { editTrade, loadManualTrades, loadTradeFormOptions } from "../tradeApi.ts";
-import { DerivedTradeMetrics, TradeForm } from "./TradeForm.tsx";
+import { editTrade, loadManualTrades } from "../tradeApi.ts";
+import { DerivedTradeMetrics } from "./TradeForm.tsx";
 
 export function previewEditedTrade(
   position: OpenPosition,
@@ -249,20 +247,16 @@ function EditManualForm({
 }
 
 export function TradeEditor({
-  asOf,
   positions,
   onSaved,
   editingPositionId,
   onEditDone,
 }: {
-  asOf: IsoDate;
   positions: readonly OpenPosition[];
   onSaved: () => void;
   editingPositionId: string | null;
   onEditDone: () => void;
 }) {
-  const [adding, setAdding] = useState(false);
-  const [options, setOptions] = useState<Load<TradeFormOptions>>({ status: "loading" });
   const [manual, setManual] = useState<{ id: string | null; load: Load<ManualTradesResponse> }>({
     id: null,
     load: { status: "loading" },
@@ -271,32 +265,9 @@ export function TradeEditor({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry must restart a failed request.
   useEffect(() => {
-    if (!adding || editingPositionId !== null) return;
-    let active = true;
-    setOptions({ status: "loading" });
-    loadTradeFormOptions().then(
-      (data) => {
-        if (active) setOptions({ status: "ready", data });
-      },
-      (cause: unknown) => {
-        if (active)
-          setOptions({
-            status: "error",
-            message: cause instanceof Error ? cause.message : String(cause),
-          });
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [adding, editingPositionId, retry]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry must restart a failed request.
-  useEffect(() => {
     if (editingPositionId === null) return;
     const id = editingPositionId;
     let active = true;
-    setAdding(false);
     setManual({ id, load: { status: "loading" } });
     loadManualTrades(id).then(
       (data) => {
@@ -318,71 +289,49 @@ export function TradeEditor({
     };
   }, [editingPositionId, retry]);
 
+  if (editingPositionId === null) return null;
   const position = positions.find((p) => p.id === editingPositionId);
-  const load =
-    editingPositionId === null
-      ? options
-      : manual.id === editingPositionId
-        ? manual.load
-        : { status: "loading" as const };
-  const cancel = () => {
-    setAdding(false);
-    onEditDone();
-  };
+  const load = manual.id === editingPositionId ? manual.load : { status: "loading" as const };
   const saved = () => {
-    setAdding(false);
     onSaved();
     onEditDone();
   };
 
   return (
     <section className="trade-editor" aria-label="Trade editor">
-      {!adding && editingPositionId === null && (
-        <button type="button" onClick={() => setAdding(true)}>
-          Add trade
-        </button>
+      {!position ? (
+        <>
+          <p role="alert">This position is no longer open.</p>
+          <button type="button" onClick={onEditDone}>
+            Cancel
+          </button>
+        </>
+      ) : load.status === "loading" ? (
+        <>
+          <p role="status">Loading trade details…</p>
+          <button type="button" onClick={onEditDone}>
+            Cancel
+          </button>
+        </>
+      ) : load.status === "error" ? (
+        <>
+          <p role="alert">{load.message}</p>
+          <button type="button" onClick={() => setRetry(retry + 1)}>
+            Retry
+          </button>
+          <button type="button" onClick={onEditDone}>
+            Cancel
+          </button>
+        </>
+      ) : (
+        <EditManualForm
+          key={editingPositionId}
+          position={position}
+          trades={load.data.trades}
+          onSaved={saved}
+          onCancel={onEditDone}
+        />
       )}
-      {(adding || editingPositionId !== null) &&
-        (editingPositionId !== null && !position ? (
-          <>
-            <p role="alert">This position is no longer open.</p>
-            <button type="button" onClick={cancel}>
-              Cancel
-            </button>
-          </>
-        ) : load.status === "loading" ? (
-          <>
-            <p role="status">Loading trade details…</p>
-            <button type="button" onClick={cancel}>
-              Cancel
-            </button>
-          </>
-        ) : load.status === "error" ? (
-          <>
-            <p role="alert">{load.message}</p>
-            <button type="button" onClick={() => setRetry(retry + 1)}>
-              Retry
-            </button>
-            <button type="button" onClick={cancel}>
-              Cancel
-            </button>
-          </>
-        ) : editingPositionId !== null &&
-          position &&
-          manual.load.status === "ready" &&
-          manual.id === editingPositionId ? (
-          <EditManualForm
-            key={editingPositionId}
-            position={position}
-            trades={manual.load.data.trades}
-            onSaved={saved}
-            onCancel={cancel}
-          />
-        ) : (
-          options.status === "ready" && (
-            <TradeForm asOf={asOf} options={options.data} onSaved={saved} onCancel={cancel} />
-          )
-        ))}
     </section>
   );
 }

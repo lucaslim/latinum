@@ -76,12 +76,14 @@ export function TradeForm({
   assignedStock,
   onSaved,
   onCancel,
+  onDirtyChange,
 }: {
   asOf: IsoDate;
   options: TradeFormOptions;
   assignedStock?: AssignedStockOption;
   onSaved: () => void;
   onCancel: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const id = useId();
   const [strategy, setStrategy] = useState<TradeStrategy>(assignedStock ? "cc" : "csp");
@@ -125,10 +127,12 @@ export function TradeForm({
       mounted.current = false;
     };
   }, []);
+  const initial = useRef({ strategy, ticker, openedOn, expiry, quantity, cover });
   const stock = strategy === "stock" || strategy === "day_trade";
   const spread = strategy.endsWith("_spread");
   const hasRole = strategy.includes("debit") || strategy.startsWith("long_");
-  const role = pickedRole ?? (strategy.includes("put") ? "hedge" : "swing");
+  const defaultRole = strategy.includes("put") ? "hedge" : "swing";
+  const role = pickedRole ?? defaultRole;
   const qty = Number(quantity);
   const feeDefault = stock
     ? "0.00"
@@ -166,6 +170,26 @@ export function TradeForm({
             : {}),
         };
   const preview = previewTrade(raw, options.assignedStock);
+  // A fee field typed back to its default is not an edit; every other field is dirty once it
+  // differs from its first-render value.
+  const edited = (value: string | null) => value !== null && value !== feeDefault;
+  const dirty =
+    strategy !== initial.current.strategy ||
+    ticker !== initial.current.ticker ||
+    openedOn !== initial.current.openedOn ||
+    expiry !== initial.current.expiry ||
+    quantity !== initial.current.quantity ||
+    cover !== initial.current.cover ||
+    [strike, price, longStrike, shortStrike, longPrice, shortPrice, basis, tag, notes].some(
+      (value) => value !== "",
+    ) ||
+    [fees, longFees, shortFees].some(edited) ||
+    (pickedRole !== null && pickedRole !== defaultRole) ||
+    adjusted ||
+    tags.length > 0;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
   const availableStock = options.assignedStock.filter((s) => s.underlying === ticker);
   const selectedStock = availableStock.find((s) => s.legId === cover);
   const input = (label: string, value: string, update: (value: string) => void, type = "text") => (

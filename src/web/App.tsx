@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import type { IsoDate } from "../domain/dates.ts";
 import type { AssignedStockOption, TradeFormOptions } from "../shared/trade.ts";
 import { useOpenPositions } from "./api.ts";
@@ -12,6 +12,12 @@ import { TradeEditor } from "./components/TradeEditor.tsx";
 import { TradeForm } from "./components/TradeForm.tsx";
 import { loadTradeFormOptions } from "./tradeApi.ts";
 
+const NEW_TRADE_HASH = "#/trades/new";
+
+function openNewTrade() {
+  if (window.location.hash !== NEW_TRADE_HASH) window.location.hash = NEW_TRADE_HASH;
+}
+
 function PositionsRoute() {
   const load = useOpenPositions();
   const [editingPositionId, setEditingPositionId] = useState<string | null>(null);
@@ -22,7 +28,6 @@ function PositionsRoute() {
       {load.status === "ready" && (
         <>
           <TradeEditor
-            asOf={load.data.asOf}
             positions={load.data.positions}
             onSaved={load.refresh}
             editingPositionId={editingPositionId}
@@ -36,6 +41,105 @@ function PositionsRoute() {
         </>
       )}
     </>
+  );
+}
+
+type OptionsLoad =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; options: TradeFormOptions };
+
+// `asOf` comes from the positions response so the trading date matches the Sheet's.
+function NewTradeRoute({
+  dirtyRef,
+  confirmLeave,
+}: {
+  dirtyRef: RefObject<boolean>;
+  confirmLeave: () => boolean;
+}) {
+  const positions = useOpenPositions();
+  const [options, setOptions] = useState<OptionsLoad>({ status: "loading" });
+  const [attempt, setAttempt] = useState(0);
+  const [dirty, setDirty] = useState(false);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry must restart a failed options request.
+  useEffect(() => {
+    let active = true;
+    setOptions({ status: "loading" });
+    loadTradeFormOptions().then(
+      (loaded) => {
+        if (active) setOptions({ status: "ready", options: loaded });
+      },
+      (cause: unknown) => {
+        if (active) {
+          setOptions({
+            status: "error",
+            message: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+
+  useEffect(() => {
+    dirtyRef.current = dirty;
+    return () => {
+      dirtyRef.current = false;
+    };
+  }, [dirty, dirtyRef]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const failure =
+    positions.status === "error"
+      ? positions.message
+      : options.status === "error"
+        ? options.message
+        : null;
+  if (failure !== null) {
+    return (
+      <div>
+        <p role="alert">{failure}</p>
+        <button
+          type="button"
+          onClick={() => {
+            positions.refresh();
+            setAttempt((value) => value + 1);
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (positions.status !== "ready" || options.status !== "ready") {
+    return <p role="status">Loading trade form…</p>;
+  }
+  return (
+    <TradeForm
+      asOf={positions.data.asOf}
+      options={options.options}
+      onDirtyChange={setDirty}
+      onSaved={() => {
+        // Saved input is not unsaved input: skip the prompt that the hash change would raise.
+        dirtyRef.current = false;
+        window.location.hash = "#/";
+      }}
+      onCancel={() => {
+        if (confirmLeave()) window.location.hash = "#/";
+      }}
+    />
   );
 }
 
@@ -165,24 +269,89 @@ function CampaignRoute({ id }: { id: string }) {
 
 export function App() {
   const [hash, setHash] = useState(() => window.location.hash);
+  const dirtyRef = useRef(false);
+  const confirmLeave = useCallback(() => {
+    if (!dirtyRef.current) return true;
+    if (!window.confirm("Discard this trade?")) return false;
+    dirtyRef.current = false;
+    return true;
+  }, []);
+
   useEffect(() => {
-    const onHashChange = () => setHash(window.location.hash);
+    const onHashChange = () => {
+      const next = window.location.hash;
+      if (next !== NEW_TRADE_HASH && !confirmLeave()) {
+        // Back has already moved the hash. Pushing the screen's URL back (instead of
+        // re-entering it) leaves the route state untouched, so the form is not remounted.
+        window.history.pushState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}${NEW_TRADE_HASH}`,
+        );
+        return;
+      }
+      setHash(next);
+    };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
+  }, [confirmLeave]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "n" || event.repeat || event.defaultPrevented) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.closest("input, textarea, select"))
+      ) {
+        return;
+      }
+      openNewTrade();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // A plain click can be refused before the hash moves, which leaves no history entry behind.
+  const nav = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const element = nav.current;
+    if (!element) return;
+    const guardLink = (event: MouseEvent) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      if (!confirmLeave()) event.preventDefault();
+    };
+    element.addEventListener("click", guardLink);
+    return () => element.removeEventListener("click", guardLink);
+  }, [confirmLeave]);
+
   const campaignId = /^#\/campaigns\/([^/]+)$/.exec(hash)?.[1];
   const monthlyPnl = hash === "#/pl";
+  const newTrade = hash === NEW_TRADE_HASH;
 
   return (
     <div className="frame">
       <div className="app">
         <header className="side">
           <div className="logo">Trading Journal</div>
-          <nav aria-label="Main">
+          <button
+            type="button"
+            className="new-trade"
+            aria-label="New trade"
+            aria-keyshortcuts="N"
+            aria-current={newTrade ? "page" : undefined}
+            onClick={openNewTrade}
+          >
+            + New trade <kbd>N</kbd>
+          </button>
+          <nav aria-label="Main" ref={nav}>
             <a
               className="nav-link"
               href="#/"
-              aria-current={campaignId || monthlyPnl ? undefined : "page"}
+              aria-current={campaignId || monthlyPnl || newTrade ? undefined : "page"}
             >
               Positions
             </a>
@@ -198,6 +367,8 @@ export function App() {
             <CampaignRoute key={campaignId} id={campaignId} />
           ) : monthlyPnl ? (
             <MonthlyPnlRoute />
+          ) : newTrade ? (
+            <NewTradeRoute dirtyRef={dirtyRef} confirmLeave={confirmLeave} />
           ) : (
             <PositionsRoute />
           )}
