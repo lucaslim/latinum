@@ -134,7 +134,7 @@ export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
             ),
           );
         const coveredLegId = legs.find((leg) => leg.coveredLegId !== null)?.coveredLegId;
-        const assignedFills = coveredLegId
+        const stockFills = coveredLegId
           ? await db
               .select({
                 price: s.trades.price,
@@ -142,21 +142,26 @@ export function repository<HKT extends PgQueryResultHKT>(db: PgDatabase<HKT>) {
                 premium: s.assignments.premiumPerShare,
               })
               .from(s.trades)
-              .innerJoin(s.assignments, eq(s.assignments.stockTradeId, s.trades.id))
-              .where(eq(s.trades.legId, coveredLegId))
+              .leftJoin(s.assignments, eq(s.assignments.stockTradeId, s.trades.id))
+              .where(and(eq(s.trades.legId, coveredLegId), eq(s.trades.action, "open")))
           : [];
-        if (coveredLegId && assignedFills.length === 0)
-          throw new Error("Covered stock leg has no assignment");
+        if (coveredLegId && stockFills.length === 0)
+          throw new Error("Covered stock leg has no opening fills");
         const coveredStock = coveredLegId
           ? {
               legId: coveredLegId,
               basis: divMoney4(
                 sumMoney4(
-                  assignedFills.map((fill) =>
-                    mulMoney4(assignedShareBasis(fill.price, fill.premium), fill.quantity),
+                  stockFills.map((fill) =>
+                    mulMoney4(
+                      fill.premium === null
+                        ? fill.price
+                        : assignedShareBasis(fill.price, fill.premium),
+                      fill.quantity,
+                    ),
                   ),
                 ),
-                assignedFills.reduce((sum, fill) => sum + fill.quantity, 0),
+                stockFills.reduce((sum, fill) => sum + fill.quantity, 0),
               ),
             }
           : null;

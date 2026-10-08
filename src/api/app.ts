@@ -6,6 +6,7 @@ import { exportRoute } from "./export.ts";
 import { neonHeartbeatWriter } from "./heartbeat.ts";
 import { lifecycleRoute } from "./lifecycle.ts";
 import { type PositionsDeps, positionsRoute } from "./positions.ts";
+import { rollRoute } from "./rolls.ts";
 import {
   createPositionRoute,
   manualTradesRoute,
@@ -23,6 +24,7 @@ export function createApp(deps: PositionsDeps) {
   app.put("/legs/:id/mark", manualMarkRoute(deps));
   app.get("/export", exportRoute(deps));
   app.post("/positions", createPositionRoute(deps));
+  app.post("/rolls", rollRoute(deps));
   app.patch("/trades/:id", patchTradeRoute(deps));
   app.get("/trade-form/options", tradeFormOptionsRoute(deps));
   app.get("/positions/:id/manual-trades", manualTradesRoute(deps));

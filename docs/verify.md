@@ -27,6 +27,8 @@ Evidence lands in `.verify/` (gitignored): full-page screenshots of the Sheet at
 | Add/edit trade | `e2e/trade-form.spec.ts` | All ten strategy chips, fees and seven holiday-adjusted expiry choices; DRAM live metrics, saved row, edited fill and footer without a document reload at 1400 px and 390 px |
 | Trade math and suggestions | `src/shared/tradeForm.test.ts`, `src/shared/symbols.test.ts`, `src/domain/expiry.test.ts` | T3 metrics, assigned share-basis prefill, user tickers first, tags, monthly and holiday chips |
 | Atomic trade writes | `src/api/trades.test.ts`, `src/db/tradeRepository.test.ts` | Invalid-body 400, late-write rollback, manual-fill edits and assigned CCs without duplicate stock fills |
+| Roll | `src/domain/roll.test.ts`, `src/db/rolls.test.ts`, `src/api/rolls.test.ts`, `e2e/roll.spec.ts` | QQQ −$56 realized / −$70 roll cash / −$210 chain cash; literal TQQQ chain +$4,800; atomic rollback, stale revisions, labelled gross/net, timeline and Sheet badge |
+| Roll seed dependency | `src/db/rollSeed.test.ts` | Enable with `T9_SEEDED_CHAIN=1` after the monthly-P/L historical seed lands; TQQQ starts at +$4,100 and its previous close nets −$813.20 |
 | Token contract | `src/web/theme/theme.contract.test.ts` | Every theme block has the full token set; no colour literals outside `tokens.css` |
 
 Add a row here when a task adds a screen.

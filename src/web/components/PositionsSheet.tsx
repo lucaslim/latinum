@@ -11,6 +11,7 @@ import { type BookTotals, bookTotals } from "../../domain/totals.ts";
 import { percent, shortDate, usd } from "../format.ts";
 import { type Cell, sheetRow } from "./sheetRow.ts";
 import "./sheet.css";
+import "./roll.css";
 
 const FILTER_LABEL: Record<SheetFilter, string> = {
   all: "All",
@@ -123,6 +124,7 @@ export function PositionsSheet({
     id: p.id,
     key: `${p.id}:${p.strategy}`,
     campaignId: p.campaignId,
+    rollChainId: p.rollChainId,
     ...sheetRow(p, asOf),
   }));
   const positionCount = new Set(positions.map((p) => p.id)).size;
@@ -173,6 +175,7 @@ export function PositionsSheet({
               <tr key={r.key} className={r.tint ? `row ${r.tint}` : "row"}>
                 <td className="tk">
                   <a href={`#/campaigns/${r.campaignId}`}>{r.ticker}</a>
+                  {r.rollChainId != null && <span className="roll-badge">rolled</span>}
                   {onEdit && (
                     <>
                       {" "}
@@ -224,6 +227,7 @@ export function PositionsSheet({
           <article key={r.key} className={r.tint ? `card ${r.tint}` : "card"}>
             <div className="l1">
               <a href={`#/campaigns/${r.campaignId}`}>{r.ticker}</a>{" "}
+              {r.rollChainId != null && <span className="roll-badge">rolled</span>}
               {onEdit && (
                 <>
                   <button

@@ -46,6 +46,12 @@ export function campaignRepository(db: Database) {
             ),
           )
           .orderBy(s.legs.id);
+        const chainIds = positions.flatMap((p) => (p.rollChainId === null ? [] : [p.rollChainId]));
+        const rolls = await tx
+          .select()
+          .from(s.rolls)
+          .where(inArray(s.rolls.rollChainId, chainIds))
+          .orderBy(s.rolls.rolledOn, s.rolls.id);
         const legIds = legs.map((l) => l.id);
         const trades = await tx
           .select()
@@ -76,8 +82,14 @@ export function campaignRepository(db: Database) {
           notes: campaign.notes,
           asOf,
           assignments,
+          rolls: rolls.map((roll) => ({
+            id: roll.id,
+            rollChainId: roll.rollChainId,
+            rolledOn: parseIsoDate(roll.rolledOn),
+          })),
           positions: positions.map((position) => ({
             id: position.id,
+            rollChainId: position.rollChainId,
             revision: positionRevision(
               position,
               legs.filter((leg) => leg.positionId === position.id),
@@ -116,6 +128,7 @@ export function campaignRepository(db: Database) {
                       price: t.price,
                       cash: t.cash,
                       fees: t.fees,
+                      rollId: t.rollId,
                     })),
                   mark: mark
                     ? {

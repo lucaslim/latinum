@@ -141,14 +141,15 @@ export function toBookPositions(rows: StoredPosition[]): OpenPosition[] {
     );
   }
   return rows.flatMap<OpenPosition>((row) => {
+    const stored = { id: row.id, campaignId: row.campaignId, rollChainId: row.rollChainId };
     const p = toBookPosition(row);
     if ("shares" in p) {
       const leg = requireLeg(row.legs, "stock", "long");
       const shares = p.shares - (covered.get(leg.id) ?? 0);
       if (shares < 0) throw new Error("Covered calls exceed stock balance");
-      return shares === 0 ? [] : [{ id: row.id, campaignId: row.campaignId, ...p, shares }];
+      return shares === 0 ? [] : [{ ...stored, ...p, shares }];
     }
-    const entries: OpenPosition[] = [{ id: row.id, campaignId: row.campaignId, ...p }];
+    const entries: OpenPosition[] = [{ ...stored, ...p }];
     if (p.strategy === "cc") {
       const stock = row.legs.find((leg) => leg.kind === "stock" && leg.side === "long");
       if (stock) {
@@ -159,8 +160,7 @@ export function toBookPositions(rows: StoredPosition[]): OpenPosition[] {
         if (shares < 0) throw new Error("Covered calls exceed stock balance");
         if (shares > 0)
           entries.push({
-            id: row.id,
-            campaignId: row.campaignId,
+            ...stored,
             underlying: p.underlying,
             openedOn: p.openedOn,
             strategy: "stock",
