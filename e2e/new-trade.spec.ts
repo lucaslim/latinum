@@ -252,6 +252,124 @@ test.describe("leaving the new trade screen", () => {
     expect(dialogs.messages).toEqual([DISCARD]);
   });
 
+  test("a click on empty sidebar space never asks, and a later Cancel still does", async ({
+    page,
+  }) => {
+    const dialogs = watchDialogs(page);
+    dialogs.accept();
+    await openDirtyForm(page);
+    const nav = page.locator('nav[aria-label="Main"]');
+    const box = await nav.boundingBox();
+    expect(box).not.toBeNull();
+    // The nav stretches below its links: the bottom corner is empty space, not a link.
+    await nav.click({ position: { x: 4, y: (box?.height ?? 0) - 4 } });
+    await expectFormKept(page);
+    expect(dialogs.messages).toEqual([]);
+    await expectBeforeUnloadPrevented(page, true);
+
+    dialogs.dismiss();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expectFormKept(page);
+    expect(dialogs.messages).toEqual([DISCARD]);
+  });
+
+  test("a sidebar link to the current screen never asks", async ({ page }) => {
+    const dialogs = watchDialogs(page);
+    await openDirtyForm(page);
+    // The new trade screen has no sidebar link of its own: the link to it is the sidebar button.
+    await page.evaluate(() => {
+      const link = document.createElement("a");
+      link.id = "probe-self";
+      link.href = "#/trades/new";
+      link.textContent = "probe";
+      document.querySelector('nav[aria-label="Main"]')?.append(link);
+    });
+    await page.locator("#probe-self").click();
+    await expectFormKept(page);
+    expect(dialogs.messages).toEqual([]);
+  });
+
+  test("repeated outside hash changes with Stay keep one history entry and the form", async ({
+    page,
+  }) => {
+    const dialogs = watchDialogs(page);
+    await openDirtyForm(page);
+    const before = await page.evaluate(() => history.length);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await page.evaluate(() => {
+        window.location.hash = "#/pl";
+      });
+      await expect.poll(() => dialogs.messages.length).toBe(attempt);
+      await expectFormKept(page);
+    }
+    expect(dialogs.messages).toEqual([DISCARD, DISCARD, DISCARD]);
+    // The browser creates one entry for the first assignment; Stay never adds another, and the
+    // next assignment overwrites the rejected forward entry.
+    expect(await page.evaluate(() => history.length)).toBe(before + 1);
+
+    // Back goes to the positions, not to the rejected Monthly P/L entry.
+    dialogs.accept();
+    await page.goBack();
+    await expect(page).toHaveURL("/");
+    await expect(page.getByTestId("sheet-table")).toBeVisible();
+    expect(dialogs.messages).toEqual([DISCARD, DISCARD, DISCARD, DISCARD]);
+  });
+
+  test("Back with Stay keeps the history intact, so Forward still reaches the next entry", async ({
+    page,
+  }) => {
+    const dialogs = watchDialogs(page);
+    await page.goto("/");
+    await newTradeButton(page).click();
+    await page.getByRole("link", { name: "Monthly P/L" }).click();
+    await expect(page).toHaveURL(/#\/pl$/);
+    await page.goBack();
+    await expect(form(page)).toBeVisible();
+    await ticker(page).fill("DRAM");
+    await ticker(page).evaluate((element) => element.setAttribute("data-keep", "1"));
+    await page.getByLabel("Strike", { exact: true }).fill("50");
+    const before = await page.evaluate(() => history.length);
+
+    await page.goBack();
+    await expect.poll(() => dialogs.messages.length).toBe(1);
+    await expectFormKept(page);
+    expect(await page.evaluate(() => history.length)).toBe(before);
+
+    // Forward still reaches the Monthly P/L entry, and asks because the form is dirty.
+    dialogs.accept();
+    await page.goForward();
+    await expect(page).toHaveURL(/#\/pl$/);
+    await expect(page.getByRole("link", { name: "Monthly P/L" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(dialogs.messages).toEqual([DISCARD, DISCARD]);
+  });
+
+  test("Forward with Stay keeps the form and the history", async ({ page }) => {
+    const dialogs = watchDialogs(page);
+    await page.goto("/");
+    await newTradeButton(page).click();
+    await page.getByRole("link", { name: "Monthly P/L" }).click();
+    await page.goBack();
+    await ticker(page).fill("DRAM");
+    await ticker(page).evaluate((element) => element.setAttribute("data-keep", "1"));
+    await page.getByLabel("Strike", { exact: true }).fill("50");
+    const before = await page.evaluate(() => history.length);
+
+    await page.goForward();
+    await expect.poll(() => dialogs.messages.length).toBe(1);
+    await expectFormKept(page);
+    expect(await page.evaluate(() => history.length)).toBe(before);
+    expect(dialogs.messages).toEqual([DISCARD]);
+
+    // Back from the restored form still asks exactly once and reaches the positions.
+    dialogs.accept();
+    await page.goBack();
+    await expect(page).toHaveURL("/");
+    expect(dialogs.messages).toEqual([DISCARD, DISCARD]);
+  });
+
   test("beforeunload is registered only while the form has unsaved input", async ({ page }) => {
     const dialogs = watchDialogs(page);
     await page.goto("/");

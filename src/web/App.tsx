@@ -13,6 +13,22 @@ import { TradeForm } from "./components/TradeForm.tsx";
 import { loadTradeFormOptions } from "./tradeApi.ts";
 
 const NEW_TRADE_HASH = "#/trades/new";
+const DISCARD_PROMPT = "Discard this trade?";
+
+// Every history entry carries its position in `history.state`, so a refused navigation can be
+// undone by traversing back to the form's entry instead of pushing a new one.
+function ordinalOf(state: unknown): number | undefined {
+  if (typeof state === "object" && state !== null && "tradingJournalEntry" in state) {
+    const { tradingJournalEntry } = state;
+    if (typeof tradingJournalEntry === "number") return tradingJournalEntry;
+  }
+  return undefined;
+}
+
+function stampEntry(ordinal: number): number {
+  window.history.replaceState({ tradingJournalEntry: ordinal }, "");
+  return ordinal;
+}
 
 function openNewTrade() {
   if (window.location.hash !== NEW_TRADE_HASH) window.location.hash = NEW_TRADE_HASH;
@@ -52,10 +68,10 @@ type OptionsLoad =
 // `asOf` comes from the positions response so the trading date matches the Sheet's.
 function NewTradeRoute({
   dirtyRef,
-  confirmLeave,
+  leave,
 }: {
   dirtyRef: RefObject<boolean>;
-  confirmLeave: () => boolean;
+  leave: (target: string) => void;
 }) {
   const positions = useOpenPositions();
   const [options, setOptions] = useState<OptionsLoad>({ status: "loading" });
@@ -136,9 +152,7 @@ function NewTradeRoute({
         dirtyRef.current = false;
         window.location.hash = "#/";
       }}
-      onCancel={() => {
-        if (confirmLeave()) window.location.hash = "#/";
-      }}
+      onCancel={() => leave("#/")}
     />
   );
 }
@@ -270,31 +284,41 @@ function CampaignRoute({ id }: { id: string }) {
 export function App() {
   const [hash, setHash] = useState(() => window.location.hash);
   const dirtyRef = useRef(false);
-  const confirmLeave = useCallback(() => {
-    if (!dirtyRef.current) return true;
-    if (!window.confirm("Discard this trade?")) return false;
-    dirtyRef.current = false;
-    return true;
+  // The entry the rendered route belongs to, and the hash whose prompt was already answered.
+  const committedEntry = useRef(0);
+  const approvedHash = useRef<string | null>(null);
+
+  // The form stays dirty until its route unmounts, so a prompt that is accepted for a navigation
+  // that then does not happen can never leave the form unguarded.
+  const leave = useCallback((target: string) => {
+    if (dirtyRef.current && !window.confirm(DISCARD_PROMPT)) return;
+    approvedHash.current = target;
+    window.location.hash = target;
   }, []);
 
   useEffect(() => {
+    committedEntry.current = ordinalOf(window.history.state) ?? stampEntry(0);
     const onHashChange = () => {
       const next = window.location.hash;
-      if (next !== NEW_TRADE_HASH && !confirmLeave()) {
-        // Back has already moved the hash. Pushing the screen's URL back (instead of
-        // re-entering it) leaves the route state untouched, so the form is not remounted.
-        window.history.pushState(
-          null,
-          "",
-          `${window.location.pathname}${window.location.search}${NEW_TRADE_HASH}`,
-        );
-        return;
+      const approved = approvedHash.current === next;
+      approvedHash.current = null;
+      // An entry the browser just created (hash assignment, typed URL) has no ordinal yet; it sits
+      // right after the entry it was created from.
+      const entry = ordinalOf(window.history.state) ?? stampEntry(committedEntry.current + 1);
+      if (next !== NEW_TRADE_HASH && dirtyRef.current && !approved) {
+        if (!window.confirm(DISCARD_PROMPT)) {
+          // Traversing back to the form's entry (rather than pushing its URL again) leaves the
+          // history as it was, and the restoring hashchange lands on the unchanged route.
+          window.history.go(committedEntry.current - entry);
+          return;
+        }
       }
+      committedEntry.current = entry;
       setHash(next);
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
-  }, [confirmLeave]);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -313,7 +337,8 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // A plain click can be refused before the hash moves, which leaves no history entry behind.
+  // Only an unmodified click on a link to another screen can leave the form: a refused click then
+  // never creates a history entry.
   const nav = useRef<HTMLElement>(null);
   useEffect(() => {
     const element = nav.current;
@@ -322,11 +347,15 @@ export function App() {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
         return;
       }
-      if (!confirmLeave()) event.preventDefault();
+      const link =
+        event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!link || link.hash === window.location.hash || !dirtyRef.current) return;
+      event.preventDefault();
+      leave(link.hash);
     };
     element.addEventListener("click", guardLink);
     return () => element.removeEventListener("click", guardLink);
-  }, [confirmLeave]);
+  }, [leave]);
 
   const campaignId = /^#\/campaigns\/([^/]+)$/.exec(hash)?.[1];
   const monthlyPnl = hash === "#/pl";
@@ -368,7 +397,7 @@ export function App() {
           ) : monthlyPnl ? (
             <MonthlyPnlRoute />
           ) : newTrade ? (
-            <NewTradeRoute dirtyRef={dirtyRef} confirmLeave={confirmLeave} />
+            <NewTradeRoute dirtyRef={dirtyRef} leave={leave} />
           ) : (
             <PositionsRoute />
           )}
