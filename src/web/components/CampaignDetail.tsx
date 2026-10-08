@@ -6,6 +6,8 @@ import { formatMoney4, type Money4, sumMoney4 } from "../../domain/money.ts";
 import { percent, usd } from "../format.ts";
 import type { LifecycleMutation, LifecycleResult, SaveLifecycle } from "../lifecycleApi.ts";
 import { LifecycleActions } from "./LifecycleActions.tsx";
+import { RollForm } from "./RollForm.tsx";
+import { RollTimeline } from "./RollTimeline.tsx";
 import "./campaign.css";
 
 export interface CampaignDetailProps {
@@ -104,6 +106,13 @@ export function CampaignDetail({
     mutation: LifecycleMutation;
     result: LifecycleResult;
   } | null>(null);
+  const saveLifecycle: SaveLifecycle | undefined = onSaveLifecycle
+    ? async (positionId, mutation) => {
+        const result = await onSaveLifecycle(positionId, mutation);
+        setLastLifecycle({ mutation, result });
+        return result;
+      }
+    : undefined;
   const realized = campaign.positions.flatMap((position) =>
     position.legs.flatMap((leg) =>
       allocateRealizedTrades(leg.trades.map((trade) => ({ ...trade, date: trade.tradeDate }))),
@@ -197,16 +206,7 @@ export function CampaignDetail({
                   </li>
                 ))}
               </ul>
-              {onSaveLifecycle && (
-                <LifecycleActions
-                  position={position}
-                  onSave={async (positionId, mutation) => {
-                    const result = await onSaveLifecycle(positionId, mutation);
-                    setLastLifecycle({ mutation, result });
-                    return result;
-                  }}
-                />
-              )}
+              {saveLifecycle && <LifecycleActions position={position} onSave={saveLifecycle} />}
               {view.unsupportedPositionIds.includes(position.id) && (
                 <p className="tone-muted">
                   Scenario cards are not available for this recorded strategy.
@@ -216,6 +216,9 @@ export function CampaignDetail({
           ))}
         </ul>
       </section>
+
+      {saveLifecycle && <RollForm campaign={campaign} onSave={saveLifecycle} />}
+      <RollTimeline campaign={campaign} />
 
       {view.csp && (
         <section className="campaign-panel" aria-label="Cash-secured put scenarios">

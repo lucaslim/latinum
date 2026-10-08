@@ -7,12 +7,15 @@ import type {
   LinkHedgeResponse,
 } from "../contracts/lifecycle.ts";
 
+import type { RollRequest, RollResponse } from "../contracts/roll.ts";
+
 export type LifecycleMutation =
   | { action: "close"; input: CloseRequest }
   | { action: "expire"; input: ExpireRequest }
   | { action: "assign"; input: AssignRequest }
-  | { action: "link-hedge"; input: LinkHedgeRequest };
-export type LifecycleResult = LifecycleResponse | LinkHedgeResponse;
+  | { action: "link-hedge"; input: LinkHedgeRequest }
+  | { action: "roll"; input: RollRequest };
+export type LifecycleResult = LifecycleResponse | LinkHedgeResponse | RollResponse;
 export type SaveLifecycle = (
   positionId: string,
   mutation: LifecycleMutation,
@@ -38,8 +41,12 @@ export async function saveLifecycle(
   mutation: LifecycleMutation,
   signal: AbortSignal,
 ): Promise<LifecycleResult> {
+  if (mutation.action === "roll" && mutation.input.positionId !== positionId)
+    throw new RangeError("Roll position does not match");
   const response = await fetch(
-    `/api/positions/${encodeURIComponent(positionId)}/${mutation.action}`,
+    mutation.action === "roll"
+      ? "/api/rolls"
+      : `/api/positions/${encodeURIComponent(positionId)}/${mutation.action}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

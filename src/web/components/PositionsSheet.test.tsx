@@ -101,6 +101,23 @@ it("counts split held CC rows as one real position and keeps residual capital", 
   expect(html.match(/href="#\/campaigns\/dram"/g)).toHaveLength(4);
 });
 
+it("labels roll-linked rows in desktop and mobile without marking unrolled rows", () => {
+  const html = renderToStaticMarkup(
+    <PositionsSheet
+      asOf={asOf}
+      positions={prototypeBook.map((p, i) => ({
+        ...p,
+        id: `p${i}`,
+        campaignId: `campaign-${i}`,
+        rollChainId: i === 0 ? "chain" : null,
+      }))}
+    />,
+  );
+  expect(text(slice(html, "tbody"))).toContain("DRAM rolled");
+  expect(text(slice(html, "article"))).toContain("DRAM rolled");
+  expect(html.match(/>rolled<\/span>/g)).toHaveLength(2);
+});
+
 describe("Sheet rows", () => {
   const html = render(prototypeBook);
   const rows = slice(html, "tbody").split("</tr>").slice(0, -1);

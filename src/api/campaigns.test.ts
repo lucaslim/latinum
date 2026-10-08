@@ -262,7 +262,7 @@ test("seeded NVDL reproduces every T3 scenario number through the read API", asy
   ]);
 });
 
-test("seeded DRAM opening basis has no invented assignment history", async () => {
+test("seeded DRAM shares come from the recorded September assignment", async () => {
   const [position] = await database.db
     .select()
     .from(s.positions)
@@ -272,15 +272,23 @@ test("seeded DRAM opening basis has no invented assignment history", async () =>
   const response = await app.request(`/api/campaigns/${position.campaignId}`);
   expect(response.status).toBe(200);
   const body = (await response.json()) as CampaignResponse;
-  expect(body.assignments).toEqual([]);
+  expect(body.openedOn).toBe("2026-08-21");
+  expect(body.assignments).toHaveLength(1);
+  expect(body.assignments[0]).toMatchObject({ shares: 1500, premiumPerShare: 20000 });
   const view = buildCampaignView(body);
   expect(view.coveredCalls[0]).toMatchObject({
     underlying: "DRAM",
     basis: 530000,
-    basisSource: "opening",
+    basisSource: "assignment",
     adjustedBasis: 519000,
+    premium: 16500000,
   });
-  expect(view.timeline.map((event) => event.trade.action)).toEqual(["open", "open"]);
+  expect(view.timeline.map((event) => event.trade.action)).toEqual([
+    "open",
+    "assign",
+    "open",
+    "open",
+  ]);
 });
 
 test("defaults manual marks to New York today, accepts four decimals and replaces idempotently", async () => {

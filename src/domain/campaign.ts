@@ -15,6 +15,7 @@ export interface CampaignTrade {
   price: Money4;
   cash: Money4;
   fees: Money4;
+  rollId?: string | null;
 }
 
 export interface CampaignMark {
@@ -42,6 +43,7 @@ export interface CampaignLeg {
 export interface CampaignPosition {
   id: string;
   revision: string;
+  rollChainId?: string | null;
   underlying: string;
   strategy: CampaignStrategy;
   role: CampaignRole;
@@ -70,6 +72,7 @@ export interface CampaignResponse {
   asOf: IsoDate;
   positions: CampaignPosition[];
   assignments: CampaignAssignment[];
+  rolls?: { id: string; rollChainId: string; rolledOn: IsoDate }[];
 }
 
 /** PUT /api/legs/:id/mark. Decimal USD input avoids introducing floating-point parsing. */

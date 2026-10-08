@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { nvdlCampaign } from "../domain/test/campaignFixtures.ts";
 import { useCampaign } from "./campaignApi.ts";
+import { type LifecycleMutation, saveLifecycle } from "./lifecycleApi.ts";
 
 const hooks = vi.hoisted(() => ({
   states: [] as unknown[],
@@ -48,6 +49,117 @@ const campaign = {
   positions: [],
   assignments: [],
 };
+const roll: LifecycleMutation = {
+  action: "roll",
+  input: {
+    positionId: "position",
+    expectedRevision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    tradeDate: "2026-10-01",
+    expiry: "2026-11-06",
+    fills: [
+      {
+        legId: "leg",
+        closePrice: "0.42",
+        closeFees: "0",
+        strike: "670",
+        openPrice: "0.77",
+        openFees: "0",
+      },
+    ],
+  },
+};
+
+test("roll posts the position-bearing contract to /api/rolls, not a positions URL", async () => {
+  const fetch = vi.fn().mockResolvedValue(Response.json({ rollId: "roll", newPositionId: "new" }));
+  vi.stubGlobal("fetch", fetch);
+  const signal = new AbortController().signal;
+  await expect(saveLifecycle("position", roll, signal)).resolves.toEqual({
+    rollId: "roll",
+    newPositionId: "new",
+  });
+  expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/rolls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify(roll.input),
+    signal,
+  });
+});
+
+test("roll refuses a mismatched position ID before issuing a request", async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  await expect(saveLifecycle("another", roll, new AbortController().signal)).rejects.toThrow(
+    "Roll position does not match",
+  );
+  expect(fetch).toHaveBeenCalledTimes(0);
+});
+
+test.each(["network", "502", "unreadable", "refresh", "stale"])(
+  "roll %s removes the ready snapshot and blocks every lifecycle mutation",
+  async (failure) => {
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json(campaign));
+    if (failure === "network") fetch.mockRejectedValueOnce(new Error("Connection lost"));
+    else if (failure === "502")
+      fetch.mockResolvedValueOnce(Response.json({ error: "Proxy failed" }, { status: 502 }));
+    else if (failure === "unreadable") fetch.mockResolvedValueOnce(new Response(""));
+    else if (failure === "stale")
+      fetch.mockResolvedValueOnce(
+        Response.json({ error: "Position changed", code: "stale_revision" }, { status: 409 }),
+      );
+    else
+      fetch
+        .mockResolvedValueOnce(Response.json(result))
+        .mockRejectedValueOnce(new Error("Refresh failed"));
+    vi.stubGlobal("fetch", fetch);
+    const actions = useCampaign("campaign");
+    await vi.waitFor(() => expect(hooks.states[0]).toEqual({ status: "ready", data: campaign }));
+    await expect(actions.saveLifecycle("position", roll)).rejects.toThrow(
+      failure === "stale"
+        ? "Position changed"
+        : failure === "refresh"
+          ? "Lifecycle action was saved"
+          : "Lifecycle action outcome is uncertain",
+    );
+    expect(hooks.states[0]).toEqual({
+      status: "error",
+      message: expect.stringContaining("Reload the campaign"),
+    });
+    await expect(actions.saveLifecycle("position", roll)).rejects.toThrow(
+      "Campaign is no longer active",
+    );
+    await expect(
+      actions.saveLifecycle("position", { action: "expire", input: { expectedRevision: "R0" } }),
+    ).rejects.toThrow("Campaign is no longer active");
+    const posts = fetch.mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.[0]).toBe("/api/rolls");
+  },
+);
+
+test("an ordinary roll rejection permits correction without rewriting its revision", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json(campaign))
+    .mockResolvedValueOnce(Response.json({ error: "Invalid strikes" }, { status: 400 }))
+    .mockResolvedValueOnce(Response.json(result))
+    .mockResolvedValueOnce(Response.json(campaign));
+  vi.stubGlobal("fetch", fetch);
+  const actions = useCampaign("campaign");
+  await vi.waitFor(() => expect(hooks.states[0]).toEqual({ status: "ready", data: campaign }));
+  await expect(actions.saveLifecycle("position", roll)).rejects.toThrow("Invalid strikes");
+  expect(hooks.states[0]).toEqual({ status: "ready", data: campaign });
+  await expect(actions.saveLifecycle("position", roll)).resolves.toEqual(result);
+  expect(
+    fetch.mock.calls
+      .filter(([, init]) => init?.method === "POST")
+      .map(([url, init]) => [url, JSON.parse(init.body)]),
+  ).toEqual([
+    ["/api/rolls", roll.input],
+    ["/api/rolls", roll.input],
+  ]);
+});
+
 const revisionPosition = nvdlCampaign.positions[0];
 if (!revisionPosition) throw new Error("Missing lifecycle fixture position");
 const result = {
