@@ -1,6 +1,7 @@
-# trading-journal
+# Latinum
 
-Options trading journal. Vite + React shell, Hono API, deployed on Vercel.
+Personal finance tracker, starting with an options trading journal. Vite + React shell, Hono API,
+deployed on Vercel at `https://latinum.vercel.app`.
 
 ## Setup
 
@@ -30,11 +31,11 @@ an in-memory PGlite that is migrated and seeded on every start; production reads
 ## Platform checks
 
 ```sh
-scripts/smoke.sh https://trading-journal-r8lqy6j1u-lucaslims-projects-af1d1be4.vercel.app
+scripts/smoke.sh https://latinum.vercel.app
 ```
 
-The URL came from the successful GitHub Production deployment's `environment_url`.
-Every deployment URL, including older ones, sits behind the same Vercel Authentication.
+`latinum.vercel.app` is the production domain. It and every deployment URL, including older
+ones, sit behind the same Vercel Authentication.
 The script checks anonymous GET and HEAD on `/` and `/api/health`, without cookies
 or redirect following. Only the observed 302 redirect to `https://vercel.com/sso-api`
 passes; application responses and transport errors fail.
