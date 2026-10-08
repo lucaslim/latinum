@@ -18,7 +18,8 @@ export default defineConfig({
     {
       // The local API on a seeded in-memory PGlite; `vite preview` proxies /api to it.
       command: "tsx src/api/server.ts",
-      env: { API_PORT: String(apiPort), E2E_MODE: "1" },
+      // Blank login settings so a developer's own hash cannot replace the local "journal" password.
+      env: { API_PORT: String(apiPort), E2E_MODE: "1", AUTH_PASSWORD_HASH: "", SESSION_SECRET: "" },
       url: `http://localhost:${apiPort}/api/health`,
       reuseExistingServer: false,
     },

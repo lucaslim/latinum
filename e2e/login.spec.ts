@@ -27,3 +27,14 @@ test("the journal stays locked until the password is entered, and logout locks i
   await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   expect((await page.request.get("/api/positions?status=open")).status()).toBe(401);
 });
+
+test("a resumed app with an expired session goes back to the login form", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Password", { exact: true }).fill("journal");
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Open positions" })).toBeVisible();
+
+  await page.context().clearCookies();
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+});

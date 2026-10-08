@@ -30,6 +30,25 @@ export function SessionGate({ children }: { children: (onLogOut: () => void) => 
     };
   }, [attempt]);
 
+  // An installed app resumes its page instead of reloading it: re-check (and so renew) the session
+  // on every return, so an expired one lands on the login form rather than on request errors.
+  const signedIn = gate.status === "signed-in";
+  useEffect(() => {
+    if (!signedIn) return;
+    const recheck = () => {
+      if (document.visibilityState !== "visible") return;
+      checkSession().then(
+        (stillSignedIn) => {
+          if (!stillSignedIn) setGate({ status: "signed-out" });
+        },
+        // Offline on resume: keep the page, since unmounting it would drop an unsaved trade.
+        (cause: unknown) => console.error(cause),
+      );
+    };
+    document.addEventListener("visibilitychange", recheck);
+    return () => document.removeEventListener("visibilitychange", recheck);
+  }, [signedIn]);
+
   if (gate.status === "signed-in") {
     return children(() =>
       logOut().then(
