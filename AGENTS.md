@@ -1,7 +1,8 @@
-# trading-journal
+# Latinum
 
-Single-user options trading journal. Vite + React web, Hono API on Vercel, Neon Postgres via
-Drizzle, PGlite in tests. TypeScript strict, Biome, Vitest 5, Playwright. Node 24, pnpm.
+Single-user personal finance tracker, starting with an options trading journal. Vite + React web,
+Hono API on Vercel, Neon Postgres via Drizzle, PGlite in tests. TypeScript strict, Biome,
+Vitest 5, Playwright. Node 24, pnpm.
 
 ## Commands
 
