@@ -49,24 +49,30 @@ function sessionCookie(res: Response): string {
   return header.split(";")[0] ?? "";
 }
 
+// Every route the deployed app registers, so a new feature route is checked without editing this file.
+const routes = deployedApp.routes.map(({ method, path }) => `${method} ${path}`);
+const guardAt = routes.indexOf("ALL /api/*");
+const PUBLIC = [
+  "GET /api/health",
+  "GET /api/cron/heartbeat",
+  "POST /api/auth/login",
+  "POST /api/auth/logout",
+  "GET /api/auth/session",
+];
+
 describe("deployed app", () => {
-  it.each([
-    ["GET", "/api/positions?status=open"],
-    ["GET", "/api/campaigns/00000000-0000-4000-8000-000000000000"],
-    ["PUT", "/api/legs/00000000-0000-4000-8000-000000000000/mark"],
-    ["GET", "/api/export"],
-    ["GET", "/api/pl/monthly"],
-    ["POST", "/api/positions"],
-    ["POST", "/api/rolls"],
-    ["PATCH", "/api/trades/00000000-0000-4000-8000-000000000000"],
-    ["GET", "/api/trade-form/options"],
-    ["GET", "/api/positions/00000000-0000-4000-8000-000000000000/manual-trades"],
-    ["POST", "/api/positions/00000000-0000-4000-8000-000000000000/close"],
-    ["POST", "/api/positions/00000000-0000-4000-8000-000000000000/expire"],
-    ["POST", "/api/positions/00000000-0000-4000-8000-000000000000/assign"],
-    ["POST", "/api/positions/00000000-0000-4000-8000-000000000000/link-hedge"],
-    ["GET", "/api/auth/session"],
-  ])("rejects anonymous %s %s", async (method, path) => {
+  it("registers only the public routes ahead of the session guard", () => {
+    expect(guardAt).toBe(PUBLIC.length);
+    expect(routes.slice(0, guardAt)).toEqual(PUBLIC);
+    expect(routes.length - guardAt - 1).toBeGreaterThanOrEqual(14);
+  });
+
+  it.each(
+    [...routes.slice(guardAt + 1), "GET /api/auth/session"].map((route) => {
+      const [method = "", path = ""] = route.split(" ");
+      return [method, path.replaceAll(/:\w+/g, "00000000-0000-4000-8000-000000000000")];
+    }),
+  )("rejects anonymous %s %s", async (method, path) => {
     const res = await deployedApp.request(path, { method });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "Unauthorized" });
