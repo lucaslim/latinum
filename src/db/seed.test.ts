@@ -14,7 +14,13 @@ test("rerunnable seed preserves the prototype Sheet economics with covered assig
     const accountId = await seedBook(db);
     await seedBook(db);
     const rows = await repository(db).readOpenPositions(accountId);
-    const loaded = toBookPositions(rows).map(({ id: _id, campaignId: _campaignId, ...p }) => p);
+    const positions = toBookPositions(rows);
+    expect(positions.filter((p) => p.rollChainId !== null).map((p) => p.underlying)).toEqual([
+      "TQQQ",
+    ]);
+    const loaded = positions.map(
+      ({ id: _id, campaignId: _campaignId, rollChainId: _rollChainId, ...p }) => p,
+    );
     expect(rows).toHaveLength(13);
     expect(loaded).toHaveLength(12);
     const nvdlCampaign = rows.filter(
